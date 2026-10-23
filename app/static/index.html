@@ -147,7 +147,7 @@ $("capture").onclick = async () => {
     const files = await waitJob(job, s => $("capStatus").textContent = `Tracking, fitting the skeleton and cleaning up... ${s}s`);
     $("capStatus").textContent = "Done.";
     const name = $("name").value;
-    $("overlay").src = files.find(f => f.endsWith(".mp4"));
+    $("overlay").src = files.find(f => f.includes("/save_overlay_"));
     $("overlay").play();
     $("result").src = files.find(f => f.endsWith(".glb"));
     $("clipSel").innerHTML = `<option>${name}</option><option>${name}_inplace</option>`;
