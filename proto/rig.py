@@ -2,7 +2,7 @@
 # so armature space equals world space and the skeleton and mesh share one unit scale.
 # Animations are re-keyed from their recorded world-space pose, because applying a
 # rotation to an armature recomputes bone rolls and would invalidate the original keys.
-import bpy
+import bpy, os
 from mathutils import Matrix
 
 
@@ -91,3 +91,35 @@ def load(glb):
     for pb in bones:
         pb.matrix_basis.identity()
     return arm, actions
+
+
+def render_from_camera(cam_info, out, n_frames):
+    # Render frames 0..n-1 from the saved reference camera with a transparent background.
+    # Also saves <out>/fit.blend for inspection.
+    scene = bpy.context.scene
+    cam_data = bpy.data.cameras.new("Cam")
+    cam_data.lens, cam_data.sensor_width, cam_data.sensor_fit = cam_info["lens"], cam_info["sensor_width"], "HORIZONTAL"
+    cam = bpy.data.objects.new("Cam", cam_data)
+    cam.matrix_world = Matrix(cam_info["cam_to_world"])
+    scene.collection.objects.link(cam)
+    scene.camera = cam
+    sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
+    sun.data.energy = 3
+    sun.rotation_euler = (0.7, 0.35, 1.05)
+    scene.collection.objects.link(sun)
+    # Cycles on the GPU: Eevee falls back to software OpenGL under WSL (~10 s per frame).
+    scene.render.engine = "CYCLES"
+    prefs = bpy.context.preferences.addons["cycles"].preferences
+    prefs.compute_device_type = "CUDA"
+    prefs.get_devices()
+    for d in prefs.devices:
+        d.use = d.type == "CUDA"
+    scene.cycles.device, scene.cycles.samples, scene.cycles.use_denoising = "GPU", 16, False
+    scene.render.resolution_x, scene.render.resolution_y = cam_info["width"], cam_info["height"]
+    scene.render.film_transparent = True
+    scene.view_settings.view_transform = "Standard"
+    scene.frame_start, scene.frame_end = 0, n_frames - 1
+    scene.render.filepath = os.path.join(out, "")
+    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out, "fit.blend"))
+    bpy.ops.render.render(animation=True)
+    print("rendered", n_frames, "frames to", out)
