@@ -9,7 +9,7 @@ import numpy as np
 sys.path.append(os.path.dirname(__file__))
 import rig
 
-glb, run = sys.argv[sys.argv.index("--") + 1:][:2]
+glb, run = rig.args()[:2]
 cam = json.load(open(os.path.join(run, "camera.json")))
 arm, _ = rig.load(glb)
 action = bpy.data.actions[cam["action"]]

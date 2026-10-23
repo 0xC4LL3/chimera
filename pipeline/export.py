@@ -11,7 +11,10 @@ import bpy, sys, os
 import numpy as np
 from mathutils import Matrix
 
-glb, run, clean, out, clip = sys.argv[sys.argv.index("--") + 1:][:5]
+sys.path.append(os.path.dirname(__file__))
+import rig as rigmod
+
+glb, run, clean, out, clip = rigmod.args()[:5]
 os.makedirs(out, exist_ok=True)
 FPS = 24
 

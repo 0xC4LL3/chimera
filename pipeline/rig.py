@@ -2,8 +2,13 @@
 # so armature space equals world space and the skeleton and mesh share one unit scale.
 # Animations are re-keyed from their recorded world-space pose, because applying a
 # rotation to an armature recomputes bone rolls and would invalidate the original keys.
-import bpy, os
+import bpy, os, sys
 from mathutils import Matrix
+
+
+def args():
+    # Script arguments, whether run as `blender -b --python x.py -- args` or `python x.py args` (bpy wheel).
+    return sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
 
 
 def unscaled(m):

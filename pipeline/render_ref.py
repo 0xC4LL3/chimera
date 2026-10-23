@@ -8,8 +8,8 @@ from bpy_extras.object_utils import world_to_camera_view
 sys.path.append(os.path.dirname(__file__))
 import rig
 
-glb, out = sys.argv[sys.argv.index("--") + 1:][:2]
-rest = sys.argv[sys.argv.index("--") + 3:]
+glb, out = rig.args()[:2]
+rest = rig.args()[2:]
 action = rest[0] if rest else None
 frame = int(rest[1]) if len(rest) > 1 else 0
 W, H = 1024, 576  # LTX needs sizes divisible by 32

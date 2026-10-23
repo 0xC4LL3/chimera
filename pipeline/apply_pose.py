@@ -7,7 +7,7 @@ from mathutils import Matrix
 sys.path.append(os.path.dirname(__file__))
 import rig
 
-glb, run, pose, out = sys.argv[sys.argv.index("--") + 1:][:4]
+glb, run, pose, out = rig.args()[:4]
 cam_info = json.load(open(os.path.join(run, "camera.json")))
 os.makedirs(out, exist_ok=True)
 data = np.load(pose)
