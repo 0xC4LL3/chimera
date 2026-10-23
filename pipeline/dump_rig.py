@@ -32,8 +32,9 @@ for o in bpy.data.objects:
     faces.append(np.array([t.vertices[:] for t in o.data.loop_triangles]) + off)
     weights.append(w / np.maximum(w.sum(1, keepdims=True), 1e-8))
 
-arm.animation_data.action = bpy.data.actions[cam["action"]]
-bpy.context.scene.frame_set(cam["frame"])
+if cam["action"]:  # otherwise the reference is the rest pose rig.load leaves in place
+    arm.animation_data.action = bpy.data.actions[cam["action"]]
+    bpy.context.scene.frame_set(cam["frame"])
 deps = bpy.context.evaluated_depsgraph_get()
 ref_verts = []
 for o in bpy.data.objects:
