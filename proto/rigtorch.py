@@ -24,7 +24,7 @@ class Rig:
         self.names = rig["names"].tolist()
         self.parents = rig["parents"].tolist()
         self.B = len(self.parents)
-        self.rest, self.ref_basis, self.tails = T(rig["rest"]), T(rig["ref_basis"]), T(rig["tails"])
+        self.rest, self.ref_basis = T(rig["rest"]), T(rig["ref_basis"])
         self.verts, self.weights = T(rig["verts"]), T(rig["weights"])
         self.faces = torch.tensor(rig["faces"], device=dev)
         self.ref_verts = T(rig["ref_verts"])
@@ -43,10 +43,10 @@ class Rig:
             mats.append(self.local_rest[i] @ b if p < 0 else mats[p] @ self.local_rest[i] @ b)
         return torch.stack(mats, -3)
 
-    def tail_points(self, mats):
-        # World position of each bone's tail, given world bone matrices from fk().
-        t = torch.cat([self.tails, torch.ones_like(self.tails[:, :1])], 1)
-        return torch.einsum("...bij,bj->...bi", mats @ self.inv_rest, t)[..., :3]
+    def skin_points(self, mats, idx):
+        # Skinned positions of selected vertices, given world bone matrices from fk() (any batch shape).
+        v1 = torch.cat([self.verts[idx], torch.ones_like(self.verts[idx, :1])], 1)
+        return torch.einsum("vb,...bij,vj->...vi", self.weights[idx], (mats @ self.inv_rest)[..., :3, :], v1)
 
     def skin(self, basis):
         mats = self.fk(basis)
