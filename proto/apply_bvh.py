@@ -101,7 +101,14 @@ sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
 sun.data.energy = 3
 sun.rotation_euler = (0.7, 0.35, 1.05)
 scene.collection.objects.link(sun)
-scene.render.engine = "BLENDER_EEVEE"
+# Cycles on the GPU: Eevee falls back to software OpenGL under WSL (~10 s per frame).
+scene.render.engine = "CYCLES"
+prefs = bpy.context.preferences.addons["cycles"].preferences
+prefs.compute_device_type = "CUDA"
+prefs.get_devices()
+for d in prefs.devices:
+    d.use = d.type == "CUDA"
+scene.cycles.device, scene.cycles.samples, scene.cycles.use_denoising = "GPU", 16, False
 scene.render.resolution_x, scene.render.resolution_y = cam_info["width"], cam_info["height"]
 scene.render.film_transparent = True
 scene.view_settings.view_transform = "Standard"

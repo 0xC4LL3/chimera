@@ -11,6 +11,23 @@ def unscaled(m):
     return Matrix.Translation(loc) @ rot.to_matrix().to_4x4()
 
 
+def bake(arm, pre=Matrix.Identity(4)):
+    # Apply `pre` then all object transforms to the data; meshes end as plain children of arm.
+    for o in bpy.data.objects:
+        mw = o.matrix_world.copy()
+        o.parent = None
+        o.matrix_world = pre @ mw
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in bpy.data.objects:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    for o in bpy.data.objects:
+        if o.type == "MESH":
+            o.parent = arm
+            o.matrix_parent_inverse.identity()
+
+
 def load(glb):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=glb, guess_original_bind_pose=False)  # rest = glTF node pose
@@ -40,33 +57,15 @@ def load(glb):
         pb.matrix_basis.identity()
     scene.frame_set(0)
 
-    # Bake transforms. Bone-parented meshes are detached first and re-attached after.
-    bone_kids = []
+    # Meshes parented to a bone (eyes, props) become meshes skinned fully to that bone.
     for o in bpy.data.objects:
-        if o.parent is not None:
-            if o.parent_type == "BONE":
-                bone_kids.append((o, o.parent_bone))
-            mw = o.matrix_world.copy()
-            o.parent = None
-            o.matrix_world = mw
-    bpy.ops.object.select_all(action="DESELECT")
-    for o in bpy.data.objects:
-        o.select_set(o.type in ("ARMATURE", "MESH"))
-    bpy.context.view_layer.objects.active = arm
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        if o.parent_type == "BONE":
+            o.vertex_groups.new(name=o.parent_bone).add(range(len(o.data.vertices)), 1.0, "REPLACE")
+            o.modifiers.new("Armature", "ARMATURE").object = arm
+    bake(arm)
     for o in list(bpy.data.objects):
         if o.type == "EMPTY":
             bpy.data.objects.remove(o)
-    kids = [o for o, _ in bone_kids]
-    for o in bpy.data.objects:
-        if o.type == "MESH" and o not in kids:
-            o.parent = arm  # keep the armature modifier link visible in the hierarchy
-            o.matrix_parent_inverse.identity()
-    bpy.context.view_layer.update()
-    for o, b in bone_kids:
-        o.parent, o.parent_type, o.parent_bone = arm, "BONE", b
-        bpy.context.view_layer.update()
-        o.matrix_world = Matrix.Identity(4)
 
     # Re-key each action from the recorded world pose (armature space is now world space).
     rest = {b.name: b.matrix_local for b in arm.data.bones}
