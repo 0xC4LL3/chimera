@@ -7,7 +7,7 @@
 # sample towards them. A soft left/right symmetry prior keeps limbs the camera cannot see
 # (the far wing, or one pointing at the lens) mirroring their visible twin. It assumes the rig
 # is mirror-symmetric about world x=0 at rest and pairs bones by .L/.R names.
-# Writes per-frame bone basis matrices (N,B,4,4) in Blender's convention.
+# Writes per-frame bone basis matrices (N,B,4,4) in Blender's convention and joint positions.
 import sys, json, os, time
 import cv2, numpy as np, torch
 
@@ -115,7 +115,7 @@ H, W = frames[0].shape[:2]
 
 rot = torch.zeros(B, 3, device=dev)
 trans = torch.zeros(3, device=dev)
-result, t0 = [], time.time()
+result, joints, t0 = [], [], time.time()
 for i, f in enumerate(frames):
     m = mask_of(f)
     dt = torch.tensor(cv2.distanceTransform(1 - m, cv2.DIST_L2, 5), device=dev)[None, None]
@@ -141,9 +141,10 @@ for i, f in enumerate(frames):
         opt.step()
     rot, trans = rot.detach(), trans.detach()
     result.append(basis_of(rot, trans).cpu().numpy())
+    joints.append(mats[:, :3, 3].detach().cpu().numpy())
     if i % 12 == 0:
         print(f"frame {i}: out {l_out.item():.2f}px cover {l_cover.item():.2f}px sym {l_sym.item():.3f} "
               f"({time.time() - t0:.0f}s)", flush=True)
 
-np.savez(out, basis=np.array(result), names=rig["names"])
+np.savez(out, basis=np.array(result), joints=np.array(joints), names=rig["names"])
 print("wrote", out)
