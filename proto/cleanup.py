@@ -10,7 +10,8 @@
 # Contacts follow the UniMate recipe: bones picked by name (or listed), in contact when low
 # and slow, cleaned with a median filter. A bone's contact point is the lowest mesh vertex
 # mostly skinned to it in the reference pose (a toe tip, the sole of a paw), since bones often
-# end above the sole. Ground is the lowest contact point over the clip.
+# end above the sole. Ground is the lowest contact point on frame 0, the known reference pose
+# (asking for contacts means the creature starts on the ground).
 # Writes basis (root motion kept) and basis_inplace (horizontal root travel removed).
 import sys, os, argparse
 import numpy as np, torch
@@ -52,7 +53,7 @@ contact_points = lambda mats: rig.skin_points(mats, cvert)
 if contact:
     c0 = contact_points(mats0)
     z = c0[..., 2]
-    ground = z.min()
+    ground = z[0].min()
     speed = torch.cat([torch.zeros_like(z[:1]), (c0[1:] - c0[:-1]).norm(dim=-1)])
     flag = ((z - ground < H_THR * size) & (speed < V_THR * size)).cpu().numpy()
     pad = np.pad(flag, ((MEDIAN // 2, MEDIAN // 2), (0, 0)), mode="edge")
