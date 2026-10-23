@@ -5,3 +5,4 @@ assets/
 runs/
 third_party/
 app/.venv/
+app/data/
