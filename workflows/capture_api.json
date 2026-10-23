@@ -1,0 +1,71 @@
+{
+ "creature": {
+  "class_type": "ChimeraLoadCreature",
+  "inputs": {
+   "model_file": "3d/dragon.glb",
+   "start_action": "DragonArmature|Dragon_Flying",
+   "start_frame": 0
+  }
+ },
+ "clip": {
+  "class_type": "LoadVideo",
+  "inputs": {
+   "file": "clip.mp4"
+  }
+ },
+ "capture": {
+  "class_type": "ChimeraCaptureMotion",
+  "inputs": {
+   "run": [
+    "creature",
+    0
+   ],
+   "video": [
+    "clip",
+    0
+   ]
+  }
+ },
+ "cleanup": {
+  "class_type": "ChimeraCleanupMotion",
+  "inputs": {
+   "run": [
+    "capture",
+    0
+   ],
+   "loop": true,
+   "grounded": false
+  }
+ },
+ "export": {
+  "class_type": "ChimeraExportAnimation",
+  "inputs": {
+   "run": [
+    "cleanup",
+    0
+   ],
+   "clip_name": "attack"
+  }
+ },
+ "overlay": {
+  "class_type": "ChimeraOverlay",
+  "inputs": {
+   "run": [
+    "cleanup",
+    0
+   ],
+   "cleaned": true
+  }
+ },
+ "save_overlay": {
+  "class_type": "SaveVideo",
+  "inputs": {
+   "video": [
+    "overlay",
+    0
+   ],
+   "filename_prefix": "chimera/overlay",
+   "format": "mp4"
+  }
+ }
+}
