@@ -1,0 +1,84 @@
+# Render the reference frame of a rigged GLB from a fixed side camera.
+# Usage: blender -b --python proto/render_ref.py -- <in.glb> <out_dir> [action] [frame]
+# Writes ref.png and camera.json (intrinsics, world->camera matrix, 2D joint positions).
+import bpy, sys, json, os, math
+from mathutils import Vector
+from bpy_extras.object_utils import world_to_camera_view
+
+glb, out = sys.argv[sys.argv.index("--") + 1:][:2]
+rest = sys.argv[sys.argv.index("--") + 3:]
+action = rest[0] if rest else None
+frame = int(rest[1]) if len(rest) > 1 else 0
+W, H = 1024, 576  # LTX needs sizes divisible by 32
+os.makedirs(out, exist_ok=True)
+
+bpy.ops.wm.read_factory_settings(use_empty=True)
+bpy.ops.import_scene.gltf(filepath=glb)
+scene = bpy.context.scene
+arm = next(o for o in scene.objects if o.type == "ARMATURE")
+# Hide stray unparented meshes (the Quaternius dragon ships an empty Icosphere).
+for o in scene.objects:
+    if o.type == "MESH" and o.parent is None:
+        o.hide_render = True
+# glTF import puts each clip on its own NLA track; mute them and set the one we want.
+for t in arm.animation_data.nla_tracks:
+    t.mute = True
+arm.animation_data.action = bpy.data.actions[action] if action else None
+if not action:
+    for pb in arm.pose.bones:
+        pb.matrix_basis.identity()
+scene.frame_set(frame)
+
+# Bounds of the posed mesh, used to frame the camera.
+deps = bpy.context.evaluated_depsgraph_get()
+pts = []
+for o in scene.objects:
+    if o.type == "MESH" and not o.hide_render:
+        ev = o.evaluated_get(deps)
+        pts += [ev.matrix_world @ v.co for v in ev.to_mesh().vertices]
+lo = Vector((min(p[i] for p in pts) for i in range(3)))
+hi = Vector((max(p[i] for p in pts) for i in range(3)))
+center, size = (lo + hi) / 2, (hi - lo)
+
+# Side camera on +X looking at -X. Leave room so the action can leave the rest bounds.
+cam_data = bpy.data.cameras.new("Cam")
+cam_data.lens, cam_data.sensor_width, cam_data.sensor_fit = 50, 36, "HORIZONTAL"
+cam = bpy.data.objects.new("Cam", cam_data)
+scene.collection.objects.link(cam)
+fov = 2 * math.atan(18 / 50)
+extent = max(size.y, size.z * W / H) * 1.5
+dist = extent / 2 / math.tan(fov / 2) + size.x / 2
+cam.location = center + Vector((dist, 0, 0))
+cam.rotation_euler = (math.pi / 2, 0, math.pi / 2)
+scene.camera = cam
+
+world = bpy.data.worlds.new("W")
+world.use_nodes = True
+world.node_tree.nodes["Background"].inputs[0].default_value = (0.6, 0.6, 0.6, 1)
+scene.world = world
+sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
+sun.data.energy = 3
+sun.rotation_euler = (math.radians(40), math.radians(20), math.radians(60))
+scene.collection.objects.link(sun)
+
+scene.render.engine = "BLENDER_EEVEE"
+scene.render.resolution_x, scene.render.resolution_y = W, H
+scene.render.resolution_percentage = 100
+scene.view_settings.view_transform = "Standard"
+scene.render.filepath = os.path.join(out, "ref.png")
+bpy.ops.render.render(write_still=True)
+
+bpy.context.view_layer.update()
+f = cam_data.lens / cam_data.sensor_width * W
+joints = {}
+for pb in arm.pose.bones:
+    p = world_to_camera_view(scene, cam, arm.matrix_world @ pb.head)
+    joints[pb.name] = [p.x * W, (1 - p.y) * H]
+json.dump({
+    "width": W, "height": H,
+    "K": [[f, 0, W / 2], [0, f, H / 2], [0, 0, 1]],
+    "world_to_cam": [list(r) for r in cam.matrix_world.inverted()],  # Blender camera: -Z forward, +Y up
+    "action": action, "frame": frame,
+    "joints2d": joints,
+}, open(os.path.join(out, "camera.json"), "w"), indent=1)
+print("wrote", out)
