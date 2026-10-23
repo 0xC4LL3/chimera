@@ -1,8 +1,7 @@
 # Dump a rig to plain arrays for the torch fitter.
 # Usage: blender -b --python proto/dump_rig.py -- <in.glb> <run_dir>
 # Reads <run_dir>/camera.json for the reference action/frame, writes <run_dir>/rig.npz:
-# names, parents, rest (B,4,4), tails (B,3) rest tail positions, ref_basis (B,4,4), verts (V,3),
-# faces (F,3), weights (V,B),
+# names, parents, rest (B,4,4), ref_basis (B,4,4), verts (V,3), faces (F,3), weights (V,B),
 # ref_verts (V,3) = Blender's own skinned mesh in the reference pose, for checking.
 import bpy, sys, os, json
 import numpy as np
@@ -46,7 +45,6 @@ np.savez(os.path.join(run, "rig.npz"),
          names=np.array(names),
          parents=np.array([idx[pb.parent.name] if pb.parent else -1 for pb in bones]),
          rest=np.array([b.matrix_local for b in arm.data.bones]),
-         tails=np.array([b.tail_local for b in arm.data.bones]),
          ref_basis=np.array([pb.matrix_basis for pb in bones]),
          verts=np.concatenate(verts), faces=np.concatenate(faces),
          weights=np.concatenate(weights), ref_verts=np.concatenate(ref_verts))
