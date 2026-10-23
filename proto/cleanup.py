@@ -1,6 +1,6 @@
 # Clean up a fitted animation: smoothing, loop closing, foot locking and a root-motion split.
 # Usage: python proto/cleanup.py <run_dir> <pose.npz> <out.npz> [--loop] [--contacts auto|Bone1,Bone2]
-# One optimisation over the whole clip adjusts every bone's rotation (and the root position) a
+# One optimisation over the whole clip adjusts every bone's rotation (and each root's position) a
 # little away from the fit, trading closeness to the fit (joint positions and bone orientations)
 # against:
 #   - smoothness: low acceleration of the same quantities. With both in the same units the pair
@@ -74,18 +74,24 @@ if contact:
     print(f"contacts: {[rig.names[j] for j in contact]}, {len(locks)} planted intervals")
 
 rot = torch.zeros(N, B, 3, device=dev, requires_grad=True)
-trans = torch.zeros(N, 3, device=dev, requires_grad=True)
-root_rest = rig.rest[0]
+roots = [i for i, p in enumerate(rig.parents) if p < 0]
+trans = torch.zeros(N, len(roots), 3, device=dev, requires_grad=True)
+root_rest = rig.rest[roots]
+
+
+def move_roots(basis, trans):
+    # Translate every root bone (extra roots are usually IK controls that carry the feet).
+    Tm = torch.eye(4, device=dev).repeat(N, len(roots), 1, 1)
+    Tm[..., :3, 3] = trans
+    basis = basis.clone()
+    basis[:, roots] = torch.linalg.inv(root_rest) @ Tm @ root_rest @ basis[:, roots]
+    return basis
 
 
 def basis_of(rot, trans):
     R = torch.eye(4, device=dev).repeat(N, B, 1, 1)
     R[..., :3, :3] = rodrigues(rot)
-    basis = fit @ R
-    Tm = torch.eye(4, device=dev).repeat(N, 1, 1)
-    Tm[:, :3, 3] = trans
-    root = torch.linalg.inv(root_rest) @ Tm @ root_rest @ basis[:, 0]
-    return torch.cat([root[:, None], basis[:, 1:]], 1)
+    return move_roots(fit @ R, trans)
 
 
 def stats(mats):
@@ -119,13 +125,10 @@ with torch.no_grad():
     basis = basis_of(rot, trans)
     mats = rig.fk(basis)
     print("after: ", stats(mats))
-    # In-place variant: remove the root's horizontal travel relative to frame 0.
+    # In-place variant: remove the main root's horizontal travel since frame 0 from every root.
     drift = mats[:, 0, :3, 3] - mats[0, 0, :3, 3]
     drift[:, 2] = 0
-    Tm = torch.eye(4, device=dev).repeat(N, 1, 1)
-    Tm[:, :3, 3] = -drift
-    inplace = basis.clone()
-    inplace[:, 0] = torch.linalg.inv(root_rest) @ Tm @ root_rest @ basis[:, 0]
+    inplace = move_roots(basis, -drift[:, None].expand(N, len(roots), 3))
 np.savez(args.out, basis=basis.cpu().numpy(), basis_inplace=inplace.cpu().numpy(),
          joints=mats[..., :3, 3].cpu().numpy(), names=rig.names)
 print("wrote", args.out)
