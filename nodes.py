@@ -38,9 +38,8 @@ def run_info(run):
 class LoadCreature(IO.ComfyNode):
     @classmethod
     def define_schema(cls):
-        base = Path(folder_paths.get_input_directory())
-        (base / "3d").mkdir(exist_ok=True)
-        files = [str(p.relative_to(base)).replace("\\", "/") for p in (base / "3d").rglob("*")
+        base = Path(folder_paths.get_input_directory())  # uploads land in 3d/ (editor) or the root (API)
+        files = [str(p.relative_to(base)).replace("\\", "/") for p in base.rglob("*")
                  if p.suffix.lower() in (".glb", ".gltf")]
         return IO.Schema(
             node_id="ChimeraLoadCreature", display_name="Load Creature (Chimera)", category="chimera",
