@@ -2,7 +2,8 @@
 # Usage: python proto/fit.py <run_dir> <video.mp4> <out_pose.npz> [tracks.npz]
 # Reads rig.npz and camera.json from run_dir. Solves frames in order, each starting from the
 # previous solution (frame 0 starts at the known reference pose). Per frame it optimises one
-# rotation offset per bone plus a root translation, against a two-way silhouette chamfer:
+# rotation offset per bone plus a translation per root bone (rigs often keep IK foot controls
+# as extra roots, and those must move on their own), against a two-way silhouette chamfer:
 # projected surface samples outside the mask are pulled in, and mask pixels pull the nearest
 # sample towards them. A soft left/right symmetry prior keeps limbs the camera cannot see
 # (the far wing, or one pointing at the lens) mirroring their visible twin. It assumes the rig
@@ -29,6 +30,7 @@ rig = Rig(run)
 parents, names, B = rig.parents, rig.names, rig.B
 rest, ref_basis, verts, faces, w2c = rig.rest, rig.ref_basis, rig.verts, rig.faces, rig.w2c
 skin, project = rig.skin, rig.project
+roots = [i for i, p in enumerate(parents) if p < 0]
 
 # Symmetry pairs, each compared in the rest frame of the pair's nearest common ancestor.
 chain = lambda i: [i] + chain(parents[i]) if i >= 0 else []
@@ -61,14 +63,14 @@ at = lambda v, fi, b: (v[faces[fi]] * b[:, :, None]).sum(1)
 
 
 def basis_of(rot, trans):
-    # Reference basis with a rotation offset per bone; root translation folded into the root basis.
+    # Reference basis with a rotation offset per bone; root translations folded into root bases.
     R = torch.eye(4, device=dev).repeat(B, 1, 1)
     R[:, :3, :3] = rodrigues(rot)
     basis = ref_basis @ R
-    Tm = torch.eye(4, device=dev)
-    Tm[:3, 3] = trans
-    root = torch.linalg.inv(rest[0]) @ Tm @ rest[0] @ basis[0]
-    return torch.cat([root[None], basis[1:]])
+    Tm = torch.eye(4, device=dev).repeat(len(roots), 1, 1)
+    Tm[:, :3, 3] = trans
+    basis[roots] = torch.linalg.inv(rest[roots]) @ Tm @ rest[roots] @ basis[roots]
+    return basis
 
 
 def symmetry(mats):
@@ -118,7 +120,7 @@ while True:
 H, W = frames[0].shape[:2]
 
 rot = torch.zeros(B, 3, device=dev)
-trans = torch.zeros(3, device=dev)
+trans = torch.zeros(len(roots), 3, device=dev)
 result, joints, t0 = [], [], time.time()
 for i, f in enumerate(frames):
     m = mask_of(f)
