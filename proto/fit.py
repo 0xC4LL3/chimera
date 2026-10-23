@@ -4,14 +4,17 @@
 # previous solution (frame 0 starts at the known reference pose). Per frame it optimises one
 # rotation offset per bone plus a root translation, against a two-way silhouette chamfer:
 # projected surface samples outside the mask are pulled in, and mask pixels pull the nearest
-# sample towards them. Writes per-frame bone basis matrices (N,B,4,4) in Blender's convention.
+# sample towards them. A soft left/right symmetry prior keeps limbs the camera cannot see
+# (the far wing, or one pointing at the lens) mirroring their visible twin. It assumes the rig
+# is mirror-symmetric about world x=0 at rest and pairs bones by .L/.R names.
+# Writes per-frame bone basis matrices (N,B,4,4) in Blender's convention.
 import sys, json, os, time
 import cv2, numpy as np, torch
 
 run, video, out = sys.argv[1:4]
 dev = "cuda"
 ITERS, N_SURF, N_MASK = 150, 4000, 1500
-W_COVER, W_SMOOTH, W_PRIOR = 1.0, 30.0, 3.0
+W_COVER, W_SMOOTH, W_PRIOR, W_SYM = 1.0, 30.0, 3.0, 3.0
 
 rig = np.load(os.path.join(run, "rig.npz"))
 cam = json.load(open(os.path.join(run, "camera.json")))
@@ -24,6 +27,18 @@ local_rest = torch.stack([rest[i] if p < 0 else torch.linalg.inv(rest[p]) @ rest
 inv_rest = torch.linalg.inv(rest)
 w2c = torch.linalg.inv(T(cam["cam_to_world"]))
 K = T(cam["K"])
+
+# Symmetry pairs, each compared in the rest frame of the pair's nearest common ancestor.
+names = rig["names"].tolist()
+chain = lambda i: [i] + chain(parents[i]) if i >= 0 else []
+pairs = []
+for i, n in enumerate(names):
+    if n.endswith(".L") and n[:-2] + ".R" in names:
+        j = names.index(n[:-2] + ".R")
+        anc = next(a for a in chain(i) if a in chain(j))
+        R0 = rest[anc, :3, :3]
+        mirror = R0.T @ torch.diag(T([-1.0, 1.0, 1.0])) @ R0
+        pairs.append((i, j, anc, mirror))
 
 # Fixed random surface samples (area-weighted), stored as barycentric weights.
 tri = verts[faces]
@@ -60,9 +75,17 @@ def skin(basis):
     mats = []
     for i, p in enumerate(parents):
         mats.append(local_rest[i] @ basis[i] if p < 0 else mats[p] @ local_rest[i] @ basis[i])
-    deform = torch.stack(mats) @ inv_rest
+    mats = torch.stack(mats)
+    deform = mats @ inv_rest
     v = torch.einsum("vb,bij,vj->vi", weights, deform[:, :3], torch.cat([verts, torch.ones_like(verts[:, :1])], 1))
-    return v
+    return v, mats
+
+
+def symmetry(mats):
+    # Rotation change of each bone since rest, seen from its pair's common ancestor; L vs mirrored R.
+    R, R0 = mats[:, :3, :3], rest[:, :3, :3]
+    change = lambda b, a: (R[a].T @ R[b]) @ (R0[a].T @ R0[b]).T
+    return sum((change(i, a) - m @ change(j, a) @ m).pow(2).sum() for i, j, a, m in pairs)
 
 
 def project(p):
@@ -77,7 +100,7 @@ def mask_of(f):
 
 
 # Check: torch skinning in the reference pose must match Blender's.
-err = (skin(ref_basis) - T(rig["ref_verts"])).norm(dim=1).max().item()
+err = (skin(ref_basis)[0] - T(rig["ref_verts"])).norm(dim=1).max().item()
 print(f"skinning check: max vertex error {err:.5f}")
 assert err < 1e-3
 
@@ -104,21 +127,23 @@ for i, f in enumerate(frames):
     trans.requires_grad_(True)
     opt = torch.optim.Adam([rot, trans], lr=0.01)
     for it in range(ITERS):
-        v = skin(basis_of(rot, trans))
+        v, mats = skin(basis_of(rot, trans))
         s = project((v[faces[fidx]] * bary[:, :, None]).sum(1))
         grid = torch.stack([s[:, 0] / (W - 1), s[:, 1] / (H - 1)], 1) * 2 - 1
         l_out = torch.nn.functional.grid_sample(dt, grid[None, None], align_corners=True).mean()
         l_cover = torch.cdist(mpix, s).min(1).values.mean()
         l_smooth = (rot - prev_rot).pow(2).sum() + (trans - prev_trans).pow(2).sum()
         l_prior = rot.pow(2).sum()
-        loss = l_out + W_COVER * l_cover + W_SMOOTH * l_smooth + W_PRIOR * l_prior
+        l_sym = symmetry(mats)
+        loss = l_out + W_COVER * l_cover + W_SMOOTH * l_smooth + W_PRIOR * l_prior + W_SYM * l_sym
         opt.zero_grad()
         loss.backward()
         opt.step()
     rot, trans = rot.detach(), trans.detach()
     result.append(basis_of(rot, trans).cpu().numpy())
     if i % 12 == 0:
-        print(f"frame {i}: out {l_out.item():.2f}px cover {l_cover.item():.2f}px ({time.time() - t0:.0f}s)", flush=True)
+        print(f"frame {i}: out {l_out.item():.2f}px cover {l_cover.item():.2f}px sym {l_sym.item():.3f} "
+              f"({time.time() - t0:.0f}s)", flush=True)
 
 np.savez(out, basis=np.array(result), names=rig["names"])
 print("wrote", out)
