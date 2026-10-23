@@ -76,6 +76,10 @@ class CaptureMotion(IO.ComfyNode):
 
     @classmethod
     def execute(cls, run, video):
+        # ComfyUI caches Load Creature, so every capture of one creature would share its folder;
+        # give each capture its own copy of the creature data instead.
+        creature, run = run, f"{run}_capture_{time.strftime('%H%M%S')}"
+        shutil.copytree(creature, run)
         clip = os.path.join(run, "clip.mp4")
         video.save_to(clip)
         python("track.py", clip, os.path.join(run, "tracks.npz"))
