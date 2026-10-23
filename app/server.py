@@ -25,11 +25,12 @@ def creature_path(creature):
     return files[0]
 
 
-def workflow(name, creature, action, frame):
+def workflow(name, creature, action, frame, grounded):
     wf = comfy.workflows.from_file(WORKFLOWS / name)
     wf.set_input("creature", "model_file", comfy.assets.from_file(creature_path(creature)))
     wf.set_input("creature", "start_action", action)
     wf.set_input("creature", "start_frame", frame)
+    wf.set_input("creature", "grounded", grounded)
     return wf
 
 
@@ -49,10 +50,11 @@ def upload_creature(file: UploadFile):
 
 
 @app.post("/api/generate")
-def generate(creature: str = Form(), prompt: str = Form(), action: str = Form(""), frame: int = Form(0), count: int = Form(3)):
+def generate(creature: str = Form(), prompt: str = Form(), action: str = Form(""), frame: int = Form(0),
+             grounded: bool = Form(True), count: int = Form(3)):
     ids = []
     for _ in range(count):
-        wf = workflow("generate_api.json", creature, action, frame)
+        wf = workflow("generate_api.json", creature, action, frame, grounded)
         wf.set_input("pos", "text", prompt)
         wf.set_input("noise", "noise_seed", random.randrange(2**48))
         ids.append(submit(wf))
@@ -61,14 +63,13 @@ def generate(creature: str = Form(), prompt: str = Form(), action: str = Form(""
 
 @app.post("/api/capture")
 def capture(creature: str = Form(), clip: str = Form(), action: str = Form(""), frame: int = Form(0),
-            name: str = Form("attack"), loop: bool = Form(True), grounded: bool = Form(False)):
+            grounded: bool = Form(True), name: str = Form("attack"), loop: bool = Form(True)):
     video = next((DATA / clip).glob("save_clip_*"), None)
     if video is None:
         raise HTTPException(404, "unknown clip")
-    wf = workflow("capture_api.json", creature, action, frame)
+    wf = workflow("capture_api.json", creature, action, frame, grounded)
     wf.set_input("clip", "file", comfy.assets.from_file(video))
     wf.set_input("cleanup", "loop", loop)
-    wf.set_input("cleanup", "grounded", grounded)
     wf.set_input("export", "clip_name", name)
     return {"job": submit(wf)}
 

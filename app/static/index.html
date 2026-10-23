@@ -46,6 +46,7 @@
       <div><label>Starting pose: animation name (empty for rest pose)</label><input type="text" id="action" placeholder="e.g. DragonArmature|Dragon_Flying"></div>
       <div style="flex: 0 1 120px"><label>Frame</label><input type="number" id="frame" value="0" min="0"></div>
     </div>
+    <label class="check"><input type="checkbox" id="grounded" checked>Stands on the ground (untick for flying or swimming creatures)</label>
     <model-viewer id="preview" camera-controls hidden></model-viewer>
   </section>
 
@@ -62,7 +63,6 @@
     <h2><span>3</span>Capture</h2>
     <div class="row"><div><label>Clip name</label><input type="text" id="name" value="attack"></div></div>
     <label class="check"><input type="checkbox" id="loop" checked>Loop: end on the starting pose</label>
-    <label class="check"><input type="checkbox" id="grounded">Grounded: lock feet that touch the floor</label>
     <button id="capture">Capture motion</button><span class="status" id="capStatus"></span>
   </section>
 
@@ -115,7 +115,7 @@ $("generate").onclick = async () => {
   $("candidates").innerHTML = "";
   picked = null;
   $("s3").classList.add("off");
-  const pose = { action: $("action").value, frame: $("frame").value };
+  const pose = { action: $("action").value, frame: $("frame").value, grounded: $("grounded").checked };
   try {
     const { jobs } = await post("/api/generate", { creature, prompt: $("prompt").value, count: $("count").value, ...pose });
     $("genStatus").textContent = "Rendering the creature and generating video...";
@@ -142,8 +142,8 @@ $("capture").onclick = async () => {
   $("capture").disabled = true;
   try {
     const { job } = await post("/api/capture", {
-      creature, clip: picked, action: $("action").value, frame: $("frame").value,
-      name: $("name").value, loop: $("loop").checked, grounded: $("grounded").checked });
+      creature, clip: picked, action: $("action").value, frame: $("frame").value, grounded: $("grounded").checked,
+      name: $("name").value, loop: $("loop").checked });
     const files = await waitJob(job, s => $("capStatus").textContent = `Tracking, fitting the skeleton and cleaning up... ${s}s`);
     $("capStatus").textContent = "Done.";
     const name = $("name").value;

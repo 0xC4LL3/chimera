@@ -48,16 +48,17 @@ class LoadCreature(IO.ComfyNode):
                 IO.Combo.Input("model_file", options=sorted(files), upload=IO.UploadType.model),
                 IO.String.Input("start_action", default="", tooltip="Animation whose first frame is the starting pose; empty for the rest pose."),
                 IO.Int.Input("start_frame", default=0, min=0),
+                IO.Boolean.Input("grounded", default=True, tooltip="Creature stands on the ground: the capture keeps it above the floor and locks feet that touch it."),
             ],
             outputs=[Run.Output(display_name="run"), IO.Image.Output(display_name="reference")],
         )
 
     @classmethod
-    def execute(cls, model_file, start_action, start_frame):
+    def execute(cls, model_file, start_action, start_frame, grounded):
         glb = folder_paths.get_annotated_filepath(model_file)
         run = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(glb).stem}_{time.strftime('%Y%m%d_%H%M%S')}")
         os.makedirs(run)
-        json.dump({"glb": glb}, open(os.path.join(run, "run.json"), "w"))
+        json.dump({"glb": glb, "grounded": grounded}, open(os.path.join(run, "run.json"), "w"))
         blender("render_ref.py", glb, run, *([start_action, str(start_frame)] if start_action else []))
         blender("dump_rig.py", glb, run)
         ref = np.asarray(Image.open(os.path.join(run, "ref.png")).convert("RGB"), dtype=np.float32) / 255
@@ -83,7 +84,8 @@ class CaptureMotion(IO.ComfyNode):
         clip = os.path.join(run, "clip.mp4")
         video.save_to(clip)
         python("track.py", clip, os.path.join(run, "tracks.npz"))
-        python("fit.py", run, clip, os.path.join(run, "pose.npz"), os.path.join(run, "tracks.npz"))
+        python("fit.py", run, clip, os.path.join(run, "pose.npz"), os.path.join(run, "tracks.npz"),
+               *(["--grounded"] if run_info(run)["grounded"] else []))
         return IO.NodeOutput(run)
 
 
@@ -92,18 +94,14 @@ class CleanupMotion(IO.ComfyNode):
     def define_schema(cls):
         return IO.Schema(
             node_id="ChimeraCleanupMotion", display_name="Creature Cleanup (Chimera)", category="chimera",
-            description="Smooth the motion, close the loop and lock planted feet.",
-            inputs=[
-                Run.Input("run"),
-                IO.Boolean.Input("loop", default=True, tooltip="Make the last frame match the first."),
-                IO.Boolean.Input("grounded", default=False, tooltip="Creature stands on the ground: lock feet that touch it in the starting pose."),
-            ],
+            description="Smooth the motion, close the loop and lock planted feet (for grounded creatures).",
+            inputs=[Run.Input("run"), IO.Boolean.Input("loop", default=True, tooltip="Make the last frame match the first.")],
             outputs=[Run.Output(display_name="run")],
         )
 
     @classmethod
-    def execute(cls, run, loop, grounded):
-        args = (["--loop"] if loop else []) + (["--contacts", "auto"] if grounded else [])
+    def execute(cls, run, loop):
+        args = (["--loop"] if loop else []) + (["--contacts", "auto"] if run_info(run)["grounded"] else [])
         python("cleanup.py", run, os.path.join(run, "pose.npz"), os.path.join(run, "clean.npz"), *args)
         return IO.NodeOutput(run)
 
