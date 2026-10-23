@@ -93,8 +93,8 @@ def load(glb):
     return arm, actions
 
 
-def render_from_camera(cam_info, out, n_frames):
-    # Render frames 0..n-1 from the saved reference camera with a transparent background.
+def render_from_camera(cam_info, out, n_frames, transparent=True):
+    # Render frames 0..n-1 from the saved reference camera, by default with a transparent background.
     # Also saves <out>/fit.blend for inspection.
     scene = bpy.context.scene
     cam_data = bpy.data.cameras.new("Cam")
@@ -116,7 +116,7 @@ def render_from_camera(cam_info, out, n_frames):
         d.use = d.type == "CUDA"
     scene.cycles.device, scene.cycles.samples, scene.cycles.use_denoising = "GPU", 16, False
     scene.render.resolution_x, scene.render.resolution_y = cam_info["width"], cam_info["height"]
-    scene.render.film_transparent = True
+    scene.render.film_transparent = transparent
     scene.view_settings.view_transform = "Standard"
     scene.frame_start, scene.frame_end = 0, n_frames - 1
     scene.render.filepath = os.path.join(out, "")
