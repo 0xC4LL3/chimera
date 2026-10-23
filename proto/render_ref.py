@@ -46,9 +46,23 @@ cam.location = center + Vector((dist, 0, 0))
 cam.rotation_euler = (math.pi / 2, 0, math.pi / 2)
 scene.camera = cam
 
+# Plain background that contrasts with the creature, so masks separate cleanly in the video:
+# neutral gray for a colourful creature, chroma green for a grayish one.
+area, total = 0.0, Vector((0, 0, 0))
+for o in scene.objects:
+    if o.type == "MESH":
+        for poly in o.data.polygons:
+            m = o.material_slots[poly.material_index].material if o.material_slots else None
+            bsdf = m and m.node_tree and m.node_tree.nodes.get("Principled BSDF")
+            if bsdf:
+                total += Vector(bsdf.inputs["Base Color"].default_value[:3]) * poly.area
+                area += poly.area
+srgb = [c ** (1 / 2.2) for c in total / max(area, 1e-8)]
+saturation = (max(srgb) - min(srgb)) / max(max(srgb), 1e-8)
+bg = (0.6, 0.6, 0.6) if saturation > 0.25 else (0.1, 0.6, 0.15)
 world = bpy.data.worlds.new("W")
 world.use_nodes = True
-world.node_tree.nodes["Background"].inputs[0].default_value = (0.6, 0.6, 0.6, 1)
+world.node_tree.nodes["Background"].inputs[0].default_value = (*bg, 1)
 scene.world = world
 sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
 sun.data.energy = 3
@@ -73,7 +87,7 @@ json.dump({
     "K": [[f, 0, W / 2], [0, f, H / 2], [0, 0, 1]],
     "cam_to_world": [list(r) for r in cam.matrix_world],  # Blender camera: -Z forward, +Y up
     "lens": cam_data.lens, "sensor_width": cam_data.sensor_width,
-    "action": action, "frame": frame,
+    "action": action, "frame": frame, "background": list(bg),
     "joints2d": joints,
 }, open(os.path.join(out, "camera.json"), "w"), indent=1)
 print("wrote", out)
