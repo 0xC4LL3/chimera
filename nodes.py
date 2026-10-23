@@ -119,7 +119,9 @@ class ExportAnimation(IO.ComfyNode):
     def execute(cls, run, clip_name):
         out = os.path.join(run, "export")
         blender("export.py", run_info(run)["glb"], run, os.path.join(run, "clean.npz"), out, clip_name)
-        return IO.NodeOutput(Types.File3D(os.path.join(out, clip_name + ".glb")), out)
+        sub = os.path.relpath(out, folder_paths.get_output_directory())
+        files = [{"filename": clip_name + ext, "subfolder": sub, "type": "output"} for ext in (".glb", ".fbx", ".bvh")]
+        return IO.NodeOutput(Types.File3D(os.path.join(out, clip_name + ".glb")), out, ui={"files": files})
 
 
 class Overlay(IO.ComfyNode):
