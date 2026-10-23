@@ -21,7 +21,7 @@ joints, basis = [], []
 for f in range(f0, f1 + 1):
     scene.frame_set(f)
     joints.append([arm.pose.bones[b.name].head[:] for b in arm.data.bones])
-    basis.append([arm.pose.bones[b.name].matrix_basis for b in arm.data.bones])
+    basis.append([arm.pose.bones[b.name].matrix_basis.copy() for b in arm.data.bones])
 np.savez(os.path.join(run, "gt.npz"), joints=np.array(joints), basis=np.array(basis),
          names=[b.name for b in arm.data.bones])
 # Shift the action so the reference frame lands on frame 0.
