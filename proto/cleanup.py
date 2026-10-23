@@ -8,8 +8,9 @@
 #   - loop closing (--loop): the last frame matches the first, so an attack chains into idle;
 #   - foot locking (--contacts): contact joints hold still while planted and stay above ground.
 # Contacts follow the UniMate recipe: bones picked by name (or listed), in contact when low
-# and slow, cleaned with a median filter. A bone's contact point is its tail (the toe tip of a
-# foot bone, the paw end of a lower leg). Ground is the lowest contact point over the clip.
+# and slow, cleaned with a median filter. A bone's contact point is the lowest mesh vertex
+# mostly skinned to it in the reference pose (a toe tip, the sole of a paw), since bones often
+# end above the sole. Ground is the lowest contact point over the clip.
 # Writes basis (root motion kept) and basis_inplace (horizontal root travel removed).
 import sys, os, argparse
 import numpy as np, torch
@@ -36,7 +37,7 @@ N, B = fit.shape[:2]
 with torch.no_grad():
     mats0 = rig.fk(fit)
 p0, R0 = mats0[..., :3, 3], mats0[..., :3, :3]
-tails0 = rig.tail_points(mats0)
+
 size = (p0[0].max(0).values - p0[0].min(0).values).norm()
 
 # Contact joints and per-frame contact flags.
@@ -44,16 +45,19 @@ if args.contacts == "auto":
     contact = [i for i, n in enumerate(rig.names) if any(k in n.lower() for k in CONTACT_NAMES)]
 else:
     contact = [rig.names.index(n) for n in args.contacts.split(",") if n]
-locks = []  # (bone, frame indices, target tail position)
+locks = []  # (contact index, frame indices, target position)
 ground = None
+cvert = [int(torch.where(rig.weights[:, j] > 0.5, rig.ref_verts[:, 2], torch.inf).argmin()) for j in contact]
+contact_points = lambda mats: rig.skin_points(mats, cvert)
 if contact:
-    z = tails0[:, contact, 2]
+    c0 = contact_points(mats0)
+    z = c0[..., 2]
     ground = z.min()
-    speed = torch.cat([torch.zeros_like(z[:1]), (tails0[1:, contact] - tails0[:-1, contact]).norm(dim=-1)])
+    speed = torch.cat([torch.zeros_like(z[:1]), (c0[1:] - c0[:-1]).norm(dim=-1)])
     flag = ((z - ground < H_THR * size) & (speed < V_THR * size)).cpu().numpy()
     pad = np.pad(flag, ((MEDIAN // 2, MEDIAN // 2), (0, 0)), mode="edge")
     flag = np.stack([np.median(pad[t:t + MEDIAN], 0) for t in range(N)]) > 0.5
-    for c, j in enumerate(contact):
+    for c in range(len(contact)):
         t = 0
         while t < N:
             if flag[t, c]:
@@ -61,9 +65,9 @@ if contact:
                 while t < N and flag[t, c]:
                     t += 1
                 frames = torch.arange(s, t, device=dev)
-                target = tails0[frames, j].mean(0)
+                target = c0[frames, c].mean(0)
                 target[2] = ground
-                locks.append((j, frames, target))
+                locks.append((c, frames, target))
             t += 1
     print(f"contacts: {[rig.names[j] for j in contact]}, {len(locks)} planted intervals")
 
@@ -83,7 +87,7 @@ def basis_of(rot, trans):
 
 
 def stats(mats):
-    p, tp = mats[..., :3, 3], rig.tail_points(mats)
+    p, tp = mats[..., :3, 3], contact_points(mats)
     acc = (p[2:] - 2 * p[1:-1] + p[:-2]).norm(dim=-1).mean() / size
     gap = (p[-1] - p[0]).norm(dim=-1).mean() / size
     slide = max([(tp[f, j] - tp[f[0], j]).norm(dim=-1).max().item() / size.item() for j, f, _ in locks], default=0)
@@ -100,11 +104,11 @@ for it in range(ITERS):
                            + (Rm[2:] - 2 * Rm[1:-1] + Rm[:-2]).pow(2).sum((-1, -2)).mean())
     if args.loop:
         loss = loss + W_LOOP * ((p[-1] - p[0]).pow(2).sum(-1).mean() + (Rm[-1] - Rm[0]).pow(2).sum((-1, -2)).mean())
-    tp = rig.tail_points(mats) / size
+    tp = contact_points(mats) / size
     for j, f, target in locks:
         loss = loss + W_LOCK * ((tp[f, j] - target / size).pow(2).sum(-1)).mean()
     if ground is not None:
-        loss = loss + W_GROUND * torch.relu(ground / size - tp[:, contact, 2]).pow(2).mean()
+        loss = loss + W_GROUND * torch.relu(ground / size - tp[..., 2]).pow(2).mean()
     opt.zero_grad()
     loss.backward()
     opt.step()
