@@ -12,31 +12,25 @@
 # (from track.py), each tracked frame-0 pixel is tied to the visible surface point under it in
 # the known reference pose, and that point is pulled along its track wherever it stays visible.
 # Writes per-frame bone basis matrices (N,B,4,4) in Blender's convention and joint positions.
-import sys, json, os, time
+import sys, os, time
 import cv2, numpy as np, torch
+
+sys.path.append(os.path.dirname(__file__))
+from rigtorch import Rig, T, dev, rodrigues
 
 run, video, out = sys.argv[1:4]
 tracks_path = sys.argv[4] if len(sys.argv) > 4 else None
-dev = "cuda"
 ITERS, N_SURF, N_MASK, N_TRACK = 300, 4000, 1500, 1500
 W_COVER, W_SMOOTH, W_PRIOR, W_SYM, W_DEPTH, W_TRACK = 1.0, 3.0, 3.0, 3.0, 30.0, 0.3
 if tracks_path:
     W_DEPTH = 300.0  # tracks pull hard in 2D; without a firm depth prior bones tilt towards the lens
 
-rig = np.load(os.path.join(run, "rig.npz"))
-cam = json.load(open(os.path.join(run, "camera.json")))
-T = lambda a: torch.tensor(np.asarray(a), dtype=torch.float32, device=dev)
-parents = rig["parents"].tolist()
-rest, ref_basis = T(rig["rest"]), T(rig["ref_basis"])
-verts, faces, weights = T(rig["verts"]), torch.tensor(rig["faces"], device=dev), T(rig["weights"])
-B = len(parents)
-local_rest = torch.stack([rest[i] if p < 0 else torch.linalg.inv(rest[p]) @ rest[i] for i, p in enumerate(parents)])
-inv_rest = torch.linalg.inv(rest)
-w2c = torch.linalg.inv(T(cam["cam_to_world"]))
-K = T(cam["K"])
+rig = Rig(run)
+parents, names, B = rig.parents, rig.names, rig.B
+rest, ref_basis, verts, faces, w2c = rig.rest, rig.ref_basis, rig.verts, rig.faces, rig.w2c
+skin, project = rig.skin, rig.project
 
 # Symmetry pairs, each compared in the rest frame of the pair's nearest common ancestor.
-names = rig["names"].tolist()
 chain = lambda i: [i] + chain(parents[i]) if i >= 0 else []
 pairs = []
 for i, n in enumerate(names):
@@ -64,16 +58,6 @@ fidx, bary = surface_samples(N_SURF, 0)
 at = lambda v, fi, b: (v[faces[fi]] * b[:, :, None]).sum(1)
 
 
-def rodrigues(r):
-    th = r.norm(dim=-1, keepdim=True).clamp(min=1e-8)
-    k = r / th
-    kx = torch.zeros(*r.shape[:-1], 3, 3, device=dev)
-    kx[..., 0, 1], kx[..., 0, 2], kx[..., 1, 2] = -k[..., 2], k[..., 1], -k[..., 0]
-    kx = kx - kx.transpose(-1, -2)
-    th = th[..., None]
-    return torch.eye(3, device=dev) + torch.sin(th) * kx + (1 - torch.cos(th)) * kx @ kx
-
-
 def basis_of(rot, trans):
     # Reference basis with a rotation offset per bone; root translation folded into the root basis.
     R = torch.eye(4, device=dev).repeat(B, 1, 1)
@@ -85,26 +69,11 @@ def basis_of(rot, trans):
     return torch.cat([root[None], basis[1:]])
 
 
-def skin(basis):
-    mats = []
-    for i, p in enumerate(parents):
-        mats.append(local_rest[i] @ basis[i] if p < 0 else mats[p] @ local_rest[i] @ basis[i])
-    mats = torch.stack(mats)
-    deform = mats @ inv_rest
-    v = torch.einsum("vb,bij,vj->vi", weights, deform[:, :3], torch.cat([verts, torch.ones_like(verts[:, :1])], 1))
-    return v, mats
-
-
 def symmetry(mats):
     # Rotation change of each bone since rest, seen from its pair's common ancestor; L vs mirrored R.
     R, R0 = mats[:, :3, :3], rest[:, :3, :3]
     change = lambda b, a: (R[a].T @ R[b]) @ (R0[a].T @ R0[b]).T
     return sum((change(i, a) - m @ change(j, a) @ m).pow(2).sum() for i, j, a, m in pairs)
-
-
-def project(p):
-    c = (w2c[:3, :3] @ p.T + w2c[:3, 3:]).T  # Blender camera looks down -Z
-    return torch.stack([K[0, 0] * c[:, 0] / -c[:, 2] + K[0, 2], K[1, 2] - K[1, 1] * c[:, 1] / -c[:, 2]], 1)
 
 
 def mask_of(f):
@@ -118,7 +87,7 @@ axis = -w2c[2, :3]  # camera viewing direction in world space
 size = (ref_joints.max(0).values - ref_joints.min(0).values).norm()
 
 # Check: torch skinning in the reference pose must match Blender's.
-err = (skin(ref_basis)[0] - T(rig["ref_verts"])).norm(dim=1).max().item()
+err = (skin(ref_basis)[0] - rig.ref_verts).norm(dim=1).max().item()
 print(f"skinning check: max vertex error {err:.5f}")
 assert err < 1e-3
 
@@ -184,5 +153,5 @@ for i, f in enumerate(frames):
         print(f"frame {i}: out {l_out.item():.2f}px cover {l_cover.item():.2f}px sym {l_sym.item():.3f} "
               f"({time.time() - t0:.0f}s)", flush=True)
 
-np.savez(out, basis=np.array(result), joints=np.array(joints), names=rig["names"])
+np.savez(out, basis=np.array(result), joints=np.array(joints), names=names)
 print("wrote", out)
