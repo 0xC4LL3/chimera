@@ -4,3 +4,4 @@ __pycache__/
 assets/
 runs/
 third_party/
+app/.venv/
