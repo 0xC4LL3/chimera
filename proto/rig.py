@@ -96,6 +96,7 @@ def load(glb):
 def render_from_camera(cam_info, out, n_frames, transparent=True):
     # Render frames 0..n-1 from the saved reference camera, by default with a transparent background.
     # Also saves <out>/fit.blend for inspection.
+    os.makedirs(out, exist_ok=True)
     scene = bpy.context.scene
     cam_data = bpy.data.cameras.new("Cam")
     cam_data.lens, cam_data.sensor_width, cam_data.sensor_fit = cam_info["lens"], cam_info["sensor_width"], "HORIZONTAL"
