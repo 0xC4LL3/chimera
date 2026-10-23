@@ -11,7 +11,7 @@ import rig
 
 glb, run = rig.args()[:2]
 cam = json.load(open(os.path.join(run, "camera.json")))
-arm, _ = rig.load(glb)
+arm, actions = rig.load(glb)
 bones = list(arm.pose.bones)
 names = [pb.name for pb in bones]
 idx = {n: i for i, n in enumerate(names)}
@@ -42,11 +42,26 @@ for o in bpy.data.objects:
         ev = o.evaluated_get(deps)
         ref_verts.append(np.array([ev.matrix_world @ v.co for v in ev.to_mesh().vertices]))
 
+ref_basis = [pb.matrix_basis.copy() for pb in bones]
+
+# Every pose of the rig's own clips: how its animator moved it, for the fitter's pose prior.
+rotvecs = [[0.0, 0.0, 0.0]] * len(bones)  # the reference pose itself
+for a in actions:
+    arm.animation_data.action = a
+    for f in range(int(a.frame_range[0]), int(a.frame_range[1]) + 1):
+        bpy.context.scene.frame_set(f)
+        for i, pb in enumerate(bones):
+            q = (ref_basis[i].inverted() @ pb.matrix_basis).to_quaternion()
+            if q.w < 0:
+                q.negate()  # the short way round
+            rotvecs.append(list(q.to_exponential_map()))
+rotvecs = np.array(rotvecs).reshape(-1, len(bones), 3)
+
 np.savez(os.path.join(run, "rig.npz"),
          names=np.array(names),
          parents=np.array([idx[pb.parent.name] if pb.parent else -1 for pb in bones]),
          rest=np.array([b.matrix_local for b in arm.data.bones]),
-         ref_basis=np.array([pb.matrix_basis for pb in bones]),
+         ref_basis=np.array(ref_basis), clip_poses=rotvecs,
          verts=np.concatenate(verts), faces=np.concatenate(faces),
          weights=np.concatenate(weights), ref_verts=np.concatenate(ref_verts))
 print("dumped", len(names), "bones", sum(len(v) for v in verts), "verts")
