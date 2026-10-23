@@ -7,8 +7,9 @@
 #     acts as a low-pass filter; W_ACC / W_FIT = 0.5 keeps motion up to about 5 Hz at 24 fps;
 #   - loop closing (--loop): the last frame matches the first, so an attack chains into idle;
 #   - foot locking (--contacts): contact joints hold still while planted and stay above ground.
-# Contacts follow the UniMate recipe: bones picked by name (or listed), in contact when low
-# and slow, cleaned with a median filter. A bone's contact point is the lowest mesh vertex
+# Contacts follow the UniMate recipe (in contact when low and slow, cleaned with a median
+# filter), but "auto" picks contact bones as those touching the ground in the reference pose,
+# which works whatever the bones are called. A bone's contact point is the lowest mesh vertex
 # mostly skinned to it in the reference pose (a toe tip, the sole of a paw), since bones often
 # end above the sole. Ground is the lowest contact point on frame 0, the known reference pose
 # (asking for contacts means the creature starts on the ground).
@@ -29,7 +30,6 @@ args = ap.parse_args()
 
 ITERS = 500
 W_FIT, W_ACC, W_LOOP, W_LOCK, W_GROUND = 1.0, 0.5, 100.0, 1000.0, 1000.0
-CONTACT_NAMES = ("foot", "feet", "toe", "paw", "hoof")
 H_THR, V_THR, MEDIAN = 0.03, 0.01, 5  # height and per-frame speed, in units of skeleton size
 
 rig = Rig(args.run)
@@ -41,9 +41,10 @@ p0, R0 = mats0[..., :3, 3], mats0[..., :3, :3]
 
 size = (p0[0].max(0).values - p0[0].min(0).values).norm()
 
-# Contact joints and per-frame contact flags.
+# Contact bones and per-frame contact flags.
+lowest = torch.where(rig.weights > 0.5, rig.ref_verts[:, 2:3], torch.inf).min(0).values  # per bone
 if args.contacts == "auto":
-    contact = [i for i, n in enumerate(rig.names) if any(k in n.lower() for k in CONTACT_NAMES)]
+    contact = torch.nonzero(lowest < lowest.min() + H_THR * size).flatten().tolist()
 else:
     contact = [rig.names.index(n) for n in args.contacts.split(",") if n]
 locks = []  # (contact index, frame indices, target position)
