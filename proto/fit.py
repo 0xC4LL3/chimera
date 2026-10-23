@@ -36,7 +36,9 @@ pairs = []
 for i, n in enumerate(names):
     if n.endswith(".L") and n[:-2] + ".R" in names:
         j = names.index(n[:-2] + ".R")
-        anc = next(a for a in chain(i) if a in chain(j))
+        anc = next((a for a in chain(i) if a in chain(j)), None)
+        if anc is None:
+            continue  # separate hierarchies, e.g. IK control bones that do not move the mesh
         R0 = rest[anc, :3, :3]
         mirror = R0.T @ torch.diag(T([-1.0, 1.0, 1.0])) @ R0
         pairs.append((i, j, anc, mirror))
