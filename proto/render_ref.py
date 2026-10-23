@@ -1,9 +1,12 @@
 # Render the reference frame of a rigged GLB from a fixed side camera.
 # Usage: blender -b --python proto/render_ref.py -- <in.glb> <out_dir> [action] [frame]
-# Writes ref.png and camera.json (intrinsics, world->camera matrix, 2D joint positions).
+# Writes ref.png and camera.json (intrinsics, camera matrix, 2D joint positions).
 import bpy, sys, json, os, math
 from mathutils import Vector
 from bpy_extras.object_utils import world_to_camera_view
+
+sys.path.append(os.path.dirname(__file__))
+import rig
 
 glb, out = sys.argv[sys.argv.index("--") + 1:][:2]
 rest = sys.argv[sys.argv.index("--") + 3:]
@@ -12,17 +15,8 @@ frame = int(rest[1]) if len(rest) > 1 else 0
 W, H = 1024, 576  # LTX needs sizes divisible by 32
 os.makedirs(out, exist_ok=True)
 
-bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.gltf(filepath=glb)
+arm, _ = rig.load(glb)
 scene = bpy.context.scene
-arm = next(o for o in scene.objects if o.type == "ARMATURE")
-# Hide stray unparented meshes (the Quaternius dragon ships an empty Icosphere).
-for o in scene.objects:
-    if o.type == "MESH" and o.parent is None:
-        o.hide_render = True
-# glTF import puts each clip on its own NLA track; mute them and set the one we want.
-for t in arm.animation_data.nla_tracks:
-    t.mute = True
 arm.animation_data.action = bpy.data.actions[action] if action else None
 if not action:
     for pb in arm.pose.bones:
@@ -77,7 +71,8 @@ for pb in arm.pose.bones:
 json.dump({
     "width": W, "height": H,
     "K": [[f, 0, W / 2], [0, f, H / 2], [0, 0, 1]],
-    "world_to_cam": [list(r) for r in cam.matrix_world.inverted()],  # Blender camera: -Z forward, +Y up
+    "cam_to_world": [list(r) for r in cam.matrix_world],  # Blender camera: -Z forward, +Y up
+    "lens": cam_data.lens, "sensor_width": cam_data.sensor_width,
     "action": action, "frame": frame,
     "joints2d": joints,
 }, open(os.path.join(out, "camera.json"), "w"), indent=1)
