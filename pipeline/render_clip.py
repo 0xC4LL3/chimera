@@ -1,5 +1,5 @@
 # Render one of the rig's own animations from the reference camera, as a ground-truth test clip.
-# Usage: blender -b --python pipeline/render_clip.py -- <in.glb> <run_dir>
+# Usage: python pipeline/render_clip.py <in.glb> <run_dir>
 # Uses the action in <run_dir>/camera.json (from render_ref.py), starting at its reference frame.
 # Writes <run_dir>/clip/####.png on a plain background and <run_dir>/gt.npz with world joint
 # positions and bone basis matrices per frame.

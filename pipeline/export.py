@@ -1,5 +1,5 @@
 # Export a cleaned animation onto the user's original rig as GLB, FBX and BVH.
-# Usage: blender -b --python pipeline/export.py -- <in.glb> <run_dir> <clean.npz> <out_dir> <clip_name>
+# Usage: python pipeline/export.py <in.glb> <run_dir> <clean.npz> <out_dir> <clip_name>
 # The pipeline works on a rebaked copy of the rig whose bones may be oriented differently, so the
 # motion is carried over as each bone's world-space deformation (posed matrix times inverse rest),
 # which does not depend on bone orientation, onto a fresh import of the user's file with its

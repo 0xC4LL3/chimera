@@ -1,5 +1,5 @@
 # Render the reference frame of a rigged GLB from a fixed side camera.
-# Usage: blender -b --python pipeline/render_ref.py -- <in.glb> <out_dir> [action] [frame]
+# Usage: python pipeline/render_ref.py <in.glb> <out_dir> [action] [frame]
 # Writes ref.png and camera.json (intrinsics, camera matrix, 2D joint positions).
 import bpy, sys, json, os, math
 from mathutils import Vector
