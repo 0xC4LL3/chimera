@@ -13,8 +13,8 @@ import cv2, numpy as np, torch
 
 run, video, out = sys.argv[1:4]
 dev = "cuda"
-ITERS, N_SURF, N_MASK = 150, 4000, 1500
-W_COVER, W_SMOOTH, W_PRIOR, W_SYM = 1.0, 30.0, 3.0, 3.0
+ITERS, N_SURF, N_MASK = 300, 4000, 1500
+W_COVER, W_SMOOTH, W_PRIOR, W_SYM = 1.0, 3.0, 3.0, 3.0
 
 rig = np.load(os.path.join(run, "rig.npz"))
 cam = json.load(open(os.path.join(run, "camera.json")))
