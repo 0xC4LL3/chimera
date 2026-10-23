@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chimera</title>
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+<style>
+  :root { --bg: #14161a; --panel: #1d2026; --line: #2c3038; --text: #e8e6e3; --dim: #9a9ea6; --accent: #e0703a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 28px; margin: 0; letter-spacing: 0.5px; }
+  .tag { color: var(--dim); margin: 4px 0 28px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 18px; }
+  section.off { opacity: 0.45; pointer-events: none; }
+  h2 { font-size: 16px; margin: 0 0 14px; } h2 span { color: var(--accent); margin-right: 8px; }
+  label { display: block; color: var(--dim); font-size: 13px; margin: 10px 0 4px; }
+  input[type=text], input[type=number], textarea, select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
+  textarea { min-height: 70px; resize: vertical; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; } .row > * { flex: 1 1 200px; }
+  .check { display: flex; align-items: center; gap: 8px; color: var(--text); margin-top: 14px; }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer; margin-top: 14px; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .status { color: var(--dim); margin-left: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-top: 16px; }
+  .card { border: 2px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+  .card.picked { border-color: var(--accent); }
+  .card video, .result video { width: 100%; display: block; }
+  .card .wait { aspect-ratio: 16/9; display: grid; place-items: center; color: var(--dim); }
+  .card button { width: calc(100% - 20px); margin: 10px; }
+  model-viewer { width: 100%; height: 360px; background: var(--bg); border-radius: 8px; }
+  .result { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 800px) { .result { grid-template-columns: 1fr; } }
+  .downloads a { color: var(--accent); margin-right: 16px; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Chimera</h1>
+  <p class="tag">Type an action, get engine-ready animation on your own creature's skeleton.</p>
+
+  <section id="s1">
+    <h2><span>1</span>Creature</h2>
+    <div class="row">
+      <div><label>Rigged model (.glb)</label><input type="file" id="model" accept=".glb,.gltf"></div>
+      <div><label>Starting pose: animation name (empty for rest pose)</label><input type="text" id="action" placeholder="e.g. DragonArmature|Dragon_Flying"></div>
+      <div style="flex: 0 1 120px"><label>Frame</label><input type="number" id="frame" value="0" min="0"></div>
+    </div>
+    <model-viewer id="preview" camera-controls hidden></model-viewer>
+  </section>
+
+  <section id="s2" class="off">
+    <h2><span>2</span>Action</h2>
+    <label>Describe the motion</label>
+    <textarea id="prompt">The creature lunges forward and snaps its jaws, then returns to its starting pose. Side view, static locked camera, plain studio background, 3D render.</textarea>
+    <div class="row"><div style="flex: 0 1 160px"><label>Candidates</label><select id="count"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></div></div>
+    <button id="generate">Generate</button><span class="status" id="genStatus"></span>
+    <div class="grid" id="candidates"></div>
+  </section>
+
+  <section id="s3" class="off">
+    <h2><span>3</span>Capture</h2>
+    <div class="row"><div><label>Clip name</label><input type="text" id="name" value="attack"></div></div>
+    <label class="check"><input type="checkbox" id="loop" checked>Loop: end on the starting pose</label>
+    <label class="check"><input type="checkbox" id="grounded">Grounded: lock feet that touch the floor</label>
+    <button id="capture">Capture motion</button><span class="status" id="capStatus"></span>
+  </section>
+
+  <section id="s4" class="off">
+    <h2><span>4</span>Result</h2>
+    <div class="result">
+      <div><label>Generated clip with the captured rig overlaid</label><video id="overlay" controls loop muted></video></div>
+      <div><label>Your rig, animated</label>
+        <model-viewer id="result" camera-controls autoplay></model-viewer>
+        <select id="clipSel"></select>
+      </div>
+    </div>
+    <p class="downloads" id="downloads"></p>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let creature = null, picked = null;
+
+async function post(url, fields) {
+  const body = new FormData();
+  for (const [k, v] of Object.entries(fields)) body.append(k, v);
+  const r = await fetch(url, { method: "POST", body });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function waitJob(id, onTick) {
+  const start = Date.now();
+  for (;;) {
+    const j = await (await fetch(`/api/job/${id}`)).json();
+    if (j.status === "succeeded") return j.files;
+    if (j.status === "failed" || j.status === "cancelled") throw new Error(j.error || j.status);
+    onTick && onTick(Math.round((Date.now() - start) / 1000));
+    await new Promise(r => setTimeout(r, 3000));
+  }
+}
+
+$("model").onchange = async () => {
+  const file = $("model").files[0];
+  if (!file) return;
+  $("preview").src = URL.createObjectURL(file);
+  $("preview").hidden = false;
+  creature = (await post("/api/creature", { file })).creature;
+  $("s2").classList.remove("off");
+};
+
+$("generate").onclick = async () => {
+  $("generate").disabled = true;
+  $("candidates").innerHTML = "";
+  picked = null;
+  $("s3").classList.add("off");
+  const pose = { action: $("action").value, frame: $("frame").value };
+  try {
+    const { jobs } = await post("/api/generate", { creature, prompt: $("prompt").value, count: $("count").value, ...pose });
+    $("genStatus").textContent = "Rendering the creature and generating video...";
+    await Promise.all(jobs.map(async (id, i) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `<div class="wait">Candidate ${i + 1}: queued</div>`;
+      $("candidates").append(card);
+      const files = await waitJob(id, s => card.firstChild.textContent = `Candidate ${i + 1}: ${s}s`);
+      card.innerHTML = `<video src="${files[0]}" autoplay loop muted playsinline></video><button>Use this clip</button>`;
+      card.querySelector("button").onclick = () => {
+        document.querySelectorAll(".card").forEach(c => c.classList.remove("picked"));
+        card.classList.add("picked");
+        picked = id;
+        $("s3").classList.remove("off");
+      };
+    }));
+    $("genStatus").textContent = "Pick the clip that best keeps your creature's anatomy.";
+  } catch (e) { $("genStatus").textContent = "Failed: " + e.message; }
+  $("generate").disabled = false;
+};
+
+$("capture").onclick = async () => {
+  $("capture").disabled = true;
+  try {
+    const { job } = await post("/api/capture", {
+      creature, clip: picked, action: $("action").value, frame: $("frame").value,
+      name: $("name").value, loop: $("loop").checked, grounded: $("grounded").checked });
+    const files = await waitJob(job, s => $("capStatus").textContent = `Tracking, fitting the skeleton and cleaning up... ${s}s`);
+    $("capStatus").textContent = "Done.";
+    const name = $("name").value;
+    $("overlay").src = files.find(f => f.endsWith(".mp4"));
+    $("overlay").play();
+    $("result").src = files.find(f => f.endsWith(".glb"));
+    $("clipSel").innerHTML = `<option>${name}</option><option>${name}_inplace</option>`;
+    $("clipSel").onchange = () => $("result").animationName = $("clipSel").value;
+    $("result").addEventListener("load", () => { $("result").animationName = name; $("result").play(); }, { once: true });
+    $("downloads").innerHTML = files.filter(f => /\.(glb|fbx|bvh)$/.test(f))
+      .map(f => `<a href="${f}" download>${f.split(".").pop().toUpperCase()}</a>`).join("");
+    $("s4").classList.remove("off");
+  } catch (e) { $("capStatus").textContent = "Failed: " + e.message; }
+  $("capture").disabled = false;
+};
+</script>
+</body>
+</html>
