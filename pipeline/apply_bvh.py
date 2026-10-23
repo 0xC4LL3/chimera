@@ -1,5 +1,5 @@
 # Apply a MoCapAnything BVH to the original rig and render it from the reference camera.
-# Usage: blender -b --python proto/apply_bvh.py -- <in.glb> <run_dir> <pred.bvh> <out_dir> [n_frames]
+# Usage: blender -b --python pipeline/apply_bvh.py -- <in.glb> <run_dir> <pred.bvh> <out_dir> [n_frames]
 # The BVH skeleton is the same rig, rotated to face +Z and without root translation. We carry
 # over each bone's world-space rotation change from its rest pose, then align the whole pose
 # to the known reference pose on frame 0 (the video's first frame is our render).

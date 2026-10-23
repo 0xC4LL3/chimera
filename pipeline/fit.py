@@ -1,5 +1,5 @@
 # Fit the rig to a generated clip by matching silhouettes through the known camera.
-# Usage: python proto/fit.py <run_dir> <video.mp4> <out_pose.npz> [tracks.npz]
+# Usage: python pipeline/fit.py <run_dir> <video.mp4> <out_pose.npz> [tracks.npz]
 # Reads rig.npz and camera.json from run_dir. Solves frames in order, each starting from the
 # previous solution (frame 0 starts at the known reference pose). Per frame it optimises one
 # rotation offset per bone plus a translation per root bone (rigs often keep IK foot controls

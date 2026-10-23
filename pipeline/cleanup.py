@@ -1,5 +1,5 @@
 # Clean up a fitted animation: smoothing, loop closing, foot locking and a root-motion split.
-# Usage: python proto/cleanup.py <run_dir> <pose.npz> <out.npz> [--loop] [--contacts auto|Bone1,Bone2]
+# Usage: python pipeline/cleanup.py <run_dir> <pose.npz> <out.npz> [--loop] [--contacts auto|Bone1,Bone2]
 # One optimisation over the whole clip adjusts every bone's rotation (and each root's position) a
 # little away from the fit, trading closeness to the fit (joint positions and bone orientations)
 # against:

@@ -1,5 +1,5 @@
 # Dump a rig to plain arrays for the torch fitter.
-# Usage: blender -b --python proto/dump_rig.py -- <in.glb> <run_dir>
+# Usage: blender -b --python pipeline/dump_rig.py -- <in.glb> <run_dir>
 # Reads <run_dir>/camera.json for the reference action/frame, writes <run_dir>/rig.npz:
 # names, parents, rest (B,4,4), ref_basis (B,4,4), verts (V,3), faces (F,3), weights (V,B),
 # ref_verts (V,3) = Blender's own skinned mesh in the reference pose, for checking.

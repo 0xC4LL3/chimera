@@ -1,5 +1,5 @@
 # Dense point tracks from frame 0 with AllTracker, kept for pixels on the creature.
-# Usage: python proto/track.py <video.mp4> <out_tracks.npz> [alltracker_dir]
+# Usage: python pipeline/track.py <video.mp4> <out_tracks.npz> [alltracker_dir]
 # Writes query (N,2) frame-0 pixels, tracks (T,N,2) pixel positions and visible (T,N) bools.
 import sys, os
 import cv2, numpy as np, torch

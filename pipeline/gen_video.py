@@ -1,5 +1,5 @@
 # Generate first-last-frame clips with LTX-2.5 on a local ComfyUI.
-# Usage: python3 proto/gen_video.py <run_dir> "<prompt>" [n_candidates]
+# Usage: python3 pipeline/gen_video.py <run_dir> "<prompt>" [n_candidates]
 # Reads <run_dir>/ref.png (used as first and last frame), writes <run_dir>/cand_<i>.mp4.
 import json, sys, time, uuid, urllib.request, os, random
 

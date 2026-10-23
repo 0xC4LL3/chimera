@@ -1,5 +1,5 @@
 # Overlay the rendered rig on the generated clip and measure silhouette overlap.
-# Usage: python proto/measure.py <video.mp4> <fit_dir> <out.mp4>
+# Usage: python pipeline/measure.py <video.mp4> <fit_dir> <out.mp4>
 # The video mask is "differs from the plain background"; the rig mask is the render's alpha.
 # Prints mean IoU and writes a clip: video | rig overlay (rig red, video creature blue).
 import sys, glob, cv2, numpy as np

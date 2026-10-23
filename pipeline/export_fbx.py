@@ -1,6 +1,6 @@
 # Export a rigged GLB into the FBX layout MoCapAnything's custom-rig preprocessing expects:
 # <out>/<Name>/<Name>.fbx (mesh + skeleton) and <Name>-<Action>.fbx per animation clip.
-# Usage: blender -b --python proto/export_fbx.py -- <in.glb> <out_root> <Name>
+# Usage: blender -b --python pipeline/export_fbx.py -- <in.glb> <out_root> <Name>
 import bpy, sys, os
 from mathutils import Matrix
 

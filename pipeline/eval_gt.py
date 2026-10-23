@@ -1,5 +1,5 @@
 # Score a fitted pose against ground-truth joints from render_clip.py.
-# Usage: python proto/eval_gt.py <run_dir> <pose.npz>
+# Usage: python pipeline/eval_gt.py <run_dir> <pose.npz>
 # Errors are in % of the skeleton's size; "depth" is along the camera axis, "image" across it.
 import sys, os, json
 import numpy as np

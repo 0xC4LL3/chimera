@@ -1,5 +1,5 @@
 # Key a fitted pose (from fit.py) onto the rig and render it from the reference camera.
-# Usage: blender -b --python proto/apply_pose.py -- <in.glb> <run_dir> <pose.npz> <out_dir>
+# Usage: blender -b --python pipeline/apply_pose.py -- <in.glb> <run_dir> <pose.npz> <out_dir>
 import bpy, sys, os, json
 import numpy as np
 from mathutils import Matrix
