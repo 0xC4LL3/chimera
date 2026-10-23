@@ -5,7 +5,7 @@ import sys, os
 import cv2, numpy as np, torch
 
 video, out = sys.argv[1:3]
-sys.path.insert(0, sys.argv[3] if len(sys.argv) > 3 else os.path.expanduser("~/alltracker"))
+sys.path.insert(0, sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.path.dirname(__file__), "..", "third_party", "alltracker"))
 from nets.alltracker import Net
 
 STRIDE, VIS_THR = 2, 0.5
