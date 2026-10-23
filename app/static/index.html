@@ -32,6 +32,7 @@
   model-viewer { width: 100%; height: 360px; background: var(--bg); border-radius: 8px; }
   .result { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 800px) { .result { grid-template-columns: 1fr; } }
   .downloads a { color: var(--accent); margin-right: 16px; font-weight: 600; }
+  #check.warn { color: #f0b429; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -75,6 +76,7 @@
         <select id="clipSel"></select>
       </div>
     </div>
+    <p id="check"></p>
     <p class="downloads" id="downloads"></p>
   </section>
 </main>
@@ -153,6 +155,9 @@ $("capture").onclick = async () => {
     $("clipSel").innerHTML = `<option>${name}</option><option>${name}_inplace</option>`;
     $("clipSel").onchange = () => $("result").animationName = $("clipSel").value;
     $("result").addEventListener("load", () => { $("result").animationName = name; $("result").play(); }, { once: true });
+    const report = await (await fetch(files.find(f => f.endsWith(".txt")))).text();
+    $("check").textContent = report;
+    $("check").className = report.startsWith("Warning") ? "warn" : "";
     $("downloads").innerHTML = files.filter(f => /\.(glb|fbx|bvh)$/.test(f))
       .map(f => `<a href="${f}" download>${f.split(".").pop().toUpperCase()}</a>`).join("");
     $("s4").classList.remove("off");

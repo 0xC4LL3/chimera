@@ -19,6 +19,7 @@ def call(cmd):
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode:
         raise RuntimeError(f"{' '.join(cmd[:4])} failed:\n{r.stdout[-3000:]}\n{r.stderr[-3000:]}")
+    return r.stdout
 
 
 def blender(script, *args):
@@ -28,7 +29,7 @@ def blender(script, *args):
 def python(script, *args):
     mm.unload_all_models()  # the torch steps need the GPU memory the video model was holding
     mm.soft_empty_cache()
-    call([sys.executable, os.path.join(PIPELINE, script), *args])
+    return call([sys.executable, os.path.join(PIPELINE, script), *args])
 
 
 def run_info(run):
@@ -70,9 +71,11 @@ class CaptureMotion(IO.ComfyNode):
     def define_schema(cls):
         return IO.Schema(
             node_id="ChimeraCaptureMotion", display_name="Capture Motion (Chimera)", category="chimera",
-            description="Fit the creature's own skeleton to the video: silhouettes and point tracks through the known camera.",
+            description="Fit the creature's own skeleton to the video: silhouettes and point tracks through the known camera. "
+                        "Then check the result is a pose the rig's own animations could make.",
             inputs=[Run.Input("run"), IO.Video.Input("video")],
-            outputs=[Run.Output(display_name="run")],
+            outputs=[Run.Output(display_name="run"), IO.String.Output(display_name="check")],
+            is_output_node=True,
         )
 
     @classmethod
@@ -86,7 +89,17 @@ class CaptureMotion(IO.ComfyNode):
         python("track.py", clip, os.path.join(run, "tracks.npz"))
         python("fit.py", run, clip, os.path.join(run, "pose.npz"), os.path.join(run, "tracks.npz"),
                *(["--grounded"] if run_info(run)["grounded"] else []))
-        return IO.NodeOutput(run)
+        report = json.loads(python("check.py", run, os.path.join(run, "pose.npz")))
+        json.dump(report, open(os.path.join(run, "check.json"), "w"))
+        if report["ok"]:
+            text = "Check passed: every frame is a pose this creature's own animations could make."
+        else:
+            first, last = report["bad_frames"]
+            text = (f"Warning: frames {first}-{last} hold poses this creature's animations never make, so the "
+                    "captured motion is probably wrong in depth. Look at the turned view, or try another clip.")
+        open(os.path.join(run, "check.txt"), "w").write(text)  # as a file too: API clients only receive files
+        sub = os.path.relpath(run, folder_paths.get_output_directory())
+        return IO.NodeOutput(run, text, ui={"text": [text], "files": [{"filename": "check.txt", "subfolder": sub, "type": "output"}]})
 
 
 class CleanupMotion(IO.ComfyNode):
