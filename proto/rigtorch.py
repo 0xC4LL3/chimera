@@ -36,11 +36,12 @@ class Rig:
         self.K = T(cam["K"])
 
     def fk(self, basis):
-        # World matrix of every bone for one frame of basis matrices (B,4,4).
+        # World matrix of every bone from basis matrices, for one frame (B,4,4) or many (N,B,4,4).
         mats = []
         for i, p in enumerate(self.parents):
-            mats.append(self.local_rest[i] @ basis[i] if p < 0 else mats[p] @ self.local_rest[i] @ basis[i])
-        return torch.stack(mats)
+            b = basis[..., i, :, :]
+            mats.append(self.local_rest[i] @ b if p < 0 else mats[p] @ self.local_rest[i] @ b)
+        return torch.stack(mats, -3)
 
     def skin(self, basis):
         mats = self.fk(basis)
