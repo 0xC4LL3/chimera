@@ -1,6 +1,7 @@
 # ComfyUI nodes for Chimera: turn a generated clip into an engine-ready animation of the user's own rig.
-# Each node wraps one pipeline script, run as a subprocess (Blender for scene work, ComfyUI's
-# Python for the torch steps). Steps share a run folder, passed between nodes as CHIMERA_RUN.
+# Each node wraps one pipeline script, run as a subprocess of ComfyUI's own Python: scene work
+# through Blender's Python API (the bpy package), the rest through torch. A subprocess keeps
+# Blender's global state out of ComfyUI. Steps share a run folder, passed as CHIMERA_RUN.
 import json, os, shutil, subprocess, sys, time
 from pathlib import Path
 import numpy as np, torch
@@ -11,7 +12,6 @@ from comfy_api.latest import ComfyExtension, InputImpl, IO, Types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PIPELINE = os.path.join(HERE, "pipeline")
-BLENDER = os.environ.get("CHIMERA_BLENDER") or shutil.which("blender") or "blender"
 Run = IO.Custom("CHIMERA_RUN")
 
 
@@ -22,7 +22,7 @@ def call(cmd):
 
 
 def blender(script, *args):
-    call([BLENDER, "-b", "--python-exit-code", "1", "--python", os.path.join(PIPELINE, script), "--", *args])
+    call([sys.executable, os.path.join(PIPELINE, script), *args])
 
 
 def python(script, *args):
