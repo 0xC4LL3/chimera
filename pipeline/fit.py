@@ -1,49 +1,100 @@
-# Fit the rig to a generated clip by matching silhouettes through the known camera.
-# Usage: python pipeline/fit.py <run_dir> <video.mp4> <out_pose.npz> [tracks.npz]
+# Fit the rig to a generated clip through the known camera.
+# Usage: python pipeline/fit.py <run_dir> <video.mp4> <out_pose.npz> [tracks.npz] [--grounded]
 # Reads rig.npz and camera.json from run_dir. Solves frames in order, each starting from the
 # previous solution (frame 0 starts at the known reference pose). Per frame it optimises one
-# rotation offset per bone plus a translation per root bone (rigs often keep IK foot controls
-# as extra roots, and those must move on their own), against a two-way silhouette chamfer:
-# projected surface samples outside the mask are pulled in, and mask pixels pull the nearest
-# sample towards them. A soft left/right symmetry prior keeps limbs the camera cannot see
-# (the far wing, or one pointing at the lens) mirroring their visible twin. It assumes the rig
-# is mirror-symmetric about world x=0 at rest and pairs bones by .L/.R names. A depth prior
-# penalises joints moving along the camera axis, which silhouettes cannot see; the camera is
-# chosen perpendicular to the action, so most real motion is across the view. With point tracks
-# (from track.py), each tracked frame-0 pixel is tied to the visible surface point under it in
-# the known reference pose, and that point is pulled along its track wherever it stays visible.
+# rotation offset per bone plus a translation per root bone. Data terms:
+#   - silhouette: a two-way chamfer; projected surface samples outside the mask are pulled in,
+#     and mask pixels pull the nearest sample towards them;
+#   - point tracks (from track.py): each tracked frame-0 pixel is tied to the visible surface
+#     point under it in the known reference pose, and pulled along its track while visible.
+# One camera leaves many poses that match the video equally well, so priors pick a plausible one:
+#   - pose prior: poses stay close to combinations of the rig's own clip poses (the main
+#     directions of a PCA over every clip frame), so limbs only move the ways its animator
+#     moved them (a wolf's legs never splay sideways, a dragon's wings may swing towards the lens);
+#   - attachment: extra root bones that carry mesh (IK foot controls) stay at their reference
+#     offset from the bone they share most mesh with, so a paw cannot leave its leg;
+#   - depth: joints moving along the camera axis, which neither data term can see, cost a little;
+#   - symmetry: left/right bone pairs (by .L/.R names) mirror each other a little, mostly for
+#     the far-side limbs the camera barely sees; assumes the rig is symmetric about x=0 at rest;
+#   - floor (--grounded): no part of the mesh may sink below the lowest point of the reference.
 # Writes per-frame bone basis matrices (N,B,4,4) in Blender's convention and joint positions.
-import sys, os, time
+import json, sys, os, time
 import cv2, numpy as np, torch
 
 sys.path.append(os.path.dirname(__file__))
 from rigtorch import Rig, T, dev, rodrigues
 
-run, video, out = sys.argv[1:4]
-tracks_path = sys.argv[4] if len(sys.argv) > 4 else None
-ITERS, N_SURF, N_MASK, N_TRACK = 300, 4000, 1500, 1500
-W_COVER, W_SMOOTH, W_PRIOR, W_SYM, W_DEPTH, W_TRACK = 1.0, 3.0, 3.0, 3.0, 30.0, 0.3
-if tracks_path:
-    W_DEPTH = 300.0  # tracks pull hard in 2D; without a firm depth prior bones tilt towards the lens
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+run, video, out = args[:3]
+tracks_path = args[3] if len(args) > 3 else None
+grounded = "--grounded" in sys.argv
+ITERS, N_SURF, N_MASK, N_TRACK, POSE_VAR = 300, 4000, 1500, 1500, 0.999
+W = dict(cover=1.0, track=0.5, smooth=3.0, pose=300.0, attach=1000.0, depth=300.0, sym=3.0, floor=1e4)
+W.update(json.loads(os.environ.get("FIT_WEIGHTS", "{}")))  # for tuning experiments
 
 rig = Rig(run)
 parents, names, B = rig.parents, rig.names, rig.B
 rest, ref_basis, verts, faces, w2c = rig.rest, rig.ref_basis, rig.verts, rig.faces, rig.w2c
 skin, project = rig.skin, rig.project
 roots = [i for i, p in enumerate(parents) if p < 0]
+chain = lambda i: [i] + chain(parents[i]) if i >= 0 else []
+ref_v, ref_mats = skin(ref_basis)
+ref_joints = ref_mats[:, :3, 3]
+axis = -w2c[2, :3]  # camera viewing direction in world space
+size = (ref_joints.max(0).values - ref_joints.min(0).values).norm()
+floor = ref_v[:, 2].min()
+
+# Check: torch skinning in the reference pose must match Blender's.
+err = (ref_v - rig.ref_verts).norm(dim=1).max().item()
+print(f"skinning check: max vertex error {err:.5f}")
+assert err < 1e-3
+
+# Pose prior: the main directions of the rig's clip poses (rotation vectors relative to the
+# reference pose, main root excluded since the body may turn freely).
+clip_poses = T(np.load(os.path.join(run, "rig.npz"))["clip_poses"])
+pose_prior = len(clip_poses) > 1
+if pose_prior:
+    X = clip_poses[:, 1:].reshape(len(clip_poses), -1)
+    pose_mean = X.mean(0)
+    _, sv, Vt = torch.linalg.svd(X - pose_mean, full_matrices=False)
+    k = int(((sv**2).cumsum(0) / (sv**2).sum() < POSE_VAR).sum()) + 1
+    pose_dirs = Vt[:k].T
+    print(f"pose prior: {k} directions from {len(clip_poses) - 1} clip frames")
+
+# Attachments: extra roots that carry mesh, glued to the bone they share most mesh with.
+att_root, att_bone, att_off = [], [], []
+for r in roots[1:]:
+    sub = [i for i in range(B) if r in chain(i)]
+    w_sub = rig.weights[:, sub].sum(1)
+    if w_sub.sum() > 0:
+        share = (rig.weights * w_sub[:, None]).sum(0)
+        share[sub] = 0
+        a = int(share.argmax())
+        att_root.append(r), att_bone.append(a)
+        att_off.append((torch.linalg.inv(ref_mats[a]) @ ref_mats[r])[:3, 3])
+att_off = torch.stack(att_off) if att_off else None
 
 # Symmetry pairs, each compared in the rest frame of the pair's nearest common ancestor.
-chain = lambda i: [i] + chain(parents[i]) if i >= 0 else []
-pairs = []
+sym_l, sym_r, sym_a = [], [], []
 for i, n in enumerate(names):
     if n.endswith(".L") and n[:-2] + ".R" in names:
         j = names.index(n[:-2] + ".R")
         anc = next((a for a in chain(i) if a in chain(j)), None)
-        if anc is None:
-            continue  # separate hierarchies, e.g. IK control bones that do not move the mesh
-        R0 = rest[anc, :3, :3]
-        mirror = R0.T @ torch.diag(T([-1.0, 1.0, 1.0])) @ R0
-        pairs.append((i, j, anc, mirror))
+        if anc is not None:  # pairs in separate hierarchies are IK controls; attachment covers them
+            sym_l.append(i), sym_r.append(j), sym_a.append(anc)
+R0 = rest[:, :3, :3]
+sym_rest_l = (R0[sym_a].transpose(1, 2) @ R0[sym_l]).transpose(1, 2)
+sym_rest_r = (R0[sym_a].transpose(1, 2) @ R0[sym_r]).transpose(1, 2)
+sym_mirror = R0[sym_a].transpose(1, 2) @ torch.diag(T([-1.0, 1.0, 1.0])) @ R0[sym_a]
+
+
+def symmetry(mats):
+    # Rotation change of each bone since rest, seen from its pair's common ancestor; L vs mirrored R.
+    R = mats[:, :3, :3]
+    Ra = R[sym_a].transpose(1, 2)
+    cl, cr = Ra @ R[sym_l] @ sym_rest_l, Ra @ R[sym_r] @ sym_rest_r
+    return (cl - sym_mirror @ cr @ sym_mirror).pow(2).sum()
+
 
 # Fixed random surface samples (area-weighted), stored as face index plus barycentric weights.
 tri = verts[faces]
@@ -73,27 +124,11 @@ def basis_of(rot, trans):
     return basis
 
 
-def symmetry(mats):
-    # Rotation change of each bone since rest, seen from its pair's common ancestor; L vs mirrored R.
-    R, R0 = mats[:, :3, :3], rest[:, :3, :3]
-    change = lambda b, a: (R[a].T @ R[b]) @ (R0[a].T @ R0[b]).T
-    return sum((change(i, a) - m @ change(j, a) @ m).pow(2).sum() for i, j, a, m in pairs)
-
-
 def mask_of(f):
     bg = np.median(np.concatenate([f[:20].reshape(-1, 3), f[-20:].reshape(-1, 3)]), 0)
     m = (np.abs(f.astype(int) - bg).sum(2) > 60).astype(np.uint8)
     return cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
 
-
-ref_joints = skin(ref_basis)[1][:, :3, 3]
-axis = -w2c[2, :3]  # camera viewing direction in world space
-size = (ref_joints.max(0).values - ref_joints.min(0).values).norm()
-
-# Check: torch skinning in the reference pose must match Blender's.
-err = (skin(ref_basis)[0] - rig.ref_verts).norm(dim=1).max().item()
-print(f"skinning check: max vertex error {err:.5f}")
-assert err < 1e-3
 
 if tracks_path:
     # Tie each tracked frame-0 pixel to the front-most surface point under it in the reference pose.
@@ -101,7 +136,7 @@ if tracks_path:
     pick = np.random.default_rng(0).choice(len(tr["query"]), min(N_TRACK, len(tr["query"])), replace=False)
     query, track_xy, track_vis = T(tr["query"][pick]), T(tr["tracks"][:, pick]), torch.tensor(tr["visible"][:, pick], device=dev)
     dfi, dbary = surface_samples(60000, 1)
-    dense = at(skin(ref_basis)[0], dfi, dbary)
+    dense = at(ref_v, dfi, dbary)
     dproj, ddepth = project(dense), (w2c[2, :3] @ dense.T + w2c[2, 3]).neg()
     near = torch.cdist(query, dproj) < 1.5  # dense points under each query pixel
     best = torch.where(near, ddepth[None], torch.inf).argmin(1)
@@ -117,7 +152,7 @@ while True:
     if not ok:
         break
     frames.append(f)
-H, W = frames[0].shape[:2]
+H, Wd = frames[0].shape[:2]
 
 rot = torch.zeros(B, 3, device=dev)
 trans = torch.zeros(len(roots), 3, device=dev)
@@ -134,19 +169,25 @@ for i, f in enumerate(frames):
     opt = torch.optim.Adam([rot, trans], lr=0.01)
     for it in range(ITERS):
         v, mats = skin(basis_of(rot, trans))
-        s = project(at(v, fidx, bary))
-        grid = torch.stack([s[:, 0] / (W - 1), s[:, 1] / (H - 1)], 1) * 2 - 1
-        l_out = torch.nn.functional.grid_sample(dt, grid[None, None], align_corners=True).mean()
-        l_cover = torch.cdist(mpix, s).min(1).values.mean()
-        l_smooth = (rot - prev_rot).pow(2).sum() + (trans - prev_trans).pow(2).sum()
-        l_prior = rot.pow(2).sum()
-        l_sym = symmetry(mats)
-        l_depth = (((mats[:, :3, 3] - ref_joints) @ axis) / size).pow(2).mean()
-        loss = (l_out + W_COVER * l_cover + W_SMOOTH * l_smooth + W_PRIOR * l_prior + W_SYM * l_sym
-                + W_DEPTH * l_depth)
+        s3 = at(v, fidx, bary)
+        s = project(s3)
+        grid = torch.stack([s[:, 0] / (Wd - 1), s[:, 1] / (H - 1)], 1) * 2 - 1
+        loss = torch.nn.functional.grid_sample(dt, grid[None, None], align_corners=True).mean()
+        loss = loss + W["cover"] * torch.cdist(mpix, s).min(1).values.mean()
+        loss = loss + W["smooth"] * ((rot - prev_rot).pow(2).sum() + (trans - prev_trans).pow(2).sum())
+        loss = loss + W["depth"] * (((mats[:, :3, 3] - ref_joints) @ axis) / size).pow(2).mean()
+        loss = loss + W["sym"] * symmetry(mats)
+        if pose_prior:
+            x = rot[1:].reshape(-1) - pose_mean
+            loss = loss + W["pose"] * (x - pose_dirs @ (pose_dirs.T @ x)).pow(2).sum()
+        if att_off is not None:
+            pos = (mats[att_bone, :3, :3] @ att_off[:, :, None])[..., 0] + mats[att_bone, :3, 3]
+            loss = loss + W["attach"] * ((pos - mats[att_root, :3, 3]) / size).pow(2).sum()
+        if grounded:
+            loss = loss + W["floor"] * (torch.relu(floor - s3[:, 2]) / size).pow(2).mean()
         if tracks_path:
             d = project(at(v, tfidx, tbary))[track_vis[i]] - track_xy[i][track_vis[i]]
-            loss = loss + W_TRACK * torch.nn.functional.huber_loss(d, torch.zeros_like(d), delta=3.0, reduction="sum") / max(len(d), 1)
+            loss = loss + W["track"] * torch.nn.functional.huber_loss(d, torch.zeros_like(d), delta=3.0, reduction="sum") / max(len(d), 1)
         opt.zero_grad()
         loss.backward()
         opt.step()
@@ -154,8 +195,7 @@ for i, f in enumerate(frames):
     result.append(basis_of(rot, trans).cpu().numpy())
     joints.append(mats[:, :3, 3].detach().cpu().numpy())
     if i % 12 == 0:
-        print(f"frame {i}: out {l_out.item():.2f}px cover {l_cover.item():.2f}px sym {l_sym.item():.3f} "
-              f"({time.time() - t0:.0f}s)", flush=True)
+        print(f"frame {i}: loss {loss.item():.2f} ({time.time() - t0:.0f}s)", flush=True)
 
 np.savez(out, basis=np.array(result), joints=np.array(joints), names=names)
 print("wrote", out)
