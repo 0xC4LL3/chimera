@@ -6,7 +6,9 @@
 # projected surface samples outside the mask are pulled in, and mask pixels pull the nearest
 # sample towards them. A soft left/right symmetry prior keeps limbs the camera cannot see
 # (the far wing, or one pointing at the lens) mirroring their visible twin. It assumes the rig
-# is mirror-symmetric about world x=0 at rest and pairs bones by .L/.R names.
+# is mirror-symmetric about world x=0 at rest and pairs bones by .L/.R names. A depth prior
+# penalises joints moving along the camera axis, which silhouettes cannot see; the camera is
+# chosen perpendicular to the action, so most real motion is across the view.
 # Writes per-frame bone basis matrices (N,B,4,4) in Blender's convention and joint positions.
 import sys, json, os, time
 import cv2, numpy as np, torch
@@ -14,7 +16,7 @@ import cv2, numpy as np, torch
 run, video, out = sys.argv[1:4]
 dev = "cuda"
 ITERS, N_SURF, N_MASK = 300, 4000, 1500
-W_COVER, W_SMOOTH, W_PRIOR, W_SYM = 1.0, 3.0, 3.0, 3.0
+W_COVER, W_SMOOTH, W_PRIOR, W_SYM, W_DEPTH = 1.0, 3.0, 3.0, 3.0, 30.0
 
 rig = np.load(os.path.join(run, "rig.npz"))
 cam = json.load(open(os.path.join(run, "camera.json")))
@@ -99,6 +101,10 @@ def mask_of(f):
     return cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
 
 
+ref_joints = skin(ref_basis)[1][:, :3, 3]
+axis = -w2c[2, :3]  # camera viewing direction in world space
+size = (ref_joints.max(0).values - ref_joints.min(0).values).norm()
+
 # Check: torch skinning in the reference pose must match Blender's.
 err = (skin(ref_basis)[0] - T(rig["ref_verts"])).norm(dim=1).max().item()
 print(f"skinning check: max vertex error {err:.5f}")
@@ -135,7 +141,9 @@ for i, f in enumerate(frames):
         l_smooth = (rot - prev_rot).pow(2).sum() + (trans - prev_trans).pow(2).sum()
         l_prior = rot.pow(2).sum()
         l_sym = symmetry(mats)
-        loss = l_out + W_COVER * l_cover + W_SMOOTH * l_smooth + W_PRIOR * l_prior + W_SYM * l_sym
+        l_depth = (((mats[:, :3, 3] - ref_joints) @ axis) / size).pow(2).mean()
+        loss = (l_out + W_COVER * l_cover + W_SMOOTH * l_smooth + W_PRIOR * l_prior + W_SYM * l_sym
+                + W_DEPTH * l_depth)
         opt.zero_grad()
         loss.backward()
         opt.step()
