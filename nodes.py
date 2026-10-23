@@ -133,7 +133,7 @@ class Overlay(IO.ComfyNode):
     def define_schema(cls):
         return IO.Schema(
             node_id="ChimeraOverlay", display_name="Rig Overlay (Chimera)", category="chimera",
-            description="Video beside the captured rig drawn over it, from the same camera, for checking the fit.",
+            description="Video beside the captured rig drawn over it from the same camera, and the rig seen from a turned camera, for checking the fit.",
             inputs=[Run.Input("run"), IO.Boolean.Input("cleaned", default=True)],
             outputs=[IO.Video.Output(display_name="video")],
         )
@@ -144,7 +144,7 @@ class Overlay(IO.ComfyNode):
         frames = os.path.join(run, "overlay_frames")
         blender("apply_pose.py", run_info(run)["glb"], run, pose, frames)
         out = os.path.join(run, "overlay.mp4")
-        python("measure.py", os.path.join(run, "clip.mp4"), frames, out)
+        python("measure.py", os.path.join(run, "clip.mp4"), frames, out, frames + "_turned")
         return IO.NodeOutput(InputImpl.VideoFromFile(out))
 
 
