@@ -31,17 +31,23 @@ class Rig:
         self.local_rest = torch.stack([self.rest[i] if p < 0 else torch.linalg.inv(self.rest[p]) @ self.rest[i]
                                        for i, p in enumerate(self.parents)])
         self.inv_rest = torch.linalg.inv(self.rest)
+        depth = [0] * self.B
+        for i, p in enumerate(self.parents):  # parents come before children
+            depth[i] = 0 if p < 0 else depth[p] + 1
+        self.levels = [(torch.tensor([i for i in range(self.B) if depth[i] == d], device=dev),
+                        torch.tensor([self.parents[i] for i in range(self.B) if depth[i] == d], device=dev))
+                       for d in range(1, max(depth) + 1)]
         self.cam = cam
         self.w2c = torch.linalg.inv(T(cam["cam_to_world"]))
         self.K = T(cam["K"])
 
     def fk(self, basis):
         # World matrix of every bone from basis matrices, for one frame (B,4,4) or many (N,B,4,4).
-        mats = []
-        for i, p in enumerate(self.parents):
-            b = basis[..., i, :, :]
-            mats.append(self.local_rest[i] @ b if p < 0 else mats[p] @ self.local_rest[i] @ b)
-        return torch.stack(mats, -3)
+        # Bones at the same depth in the hierarchy are done together, one step per level.
+        mats = self.local_rest @ basis
+        for idx, par in self.levels:
+            mats = mats.index_copy(-3, idx, mats[..., par, :, :] @ mats[..., idx, :, :])
+        return mats
 
     def skin_points(self, mats, idx):
         # Skinned positions of selected vertices, given world bone matrices from fk() (any batch shape).
