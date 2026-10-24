@@ -49,13 +49,14 @@
     </div>
     <label class="check"><input type="checkbox" id="grounded" checked>Stands on the ground (untick for flying or swimming creatures)</label>
     <label class="check"><input type="checkbox" id="autorig">My model has no rig (build one automatically; may need a retry or manual fixes)</label>
+    <label class="check"><input type="checkbox" id="split" checked>Film from the side and the front at once (captures depth better; untick for a single side view)</label>
     <model-viewer id="preview" camera-controls hidden></model-viewer>
   </section>
 
   <section id="s2" class="off">
     <h2><span>2</span>Action</h2>
     <label>Describe the motion</label>
-    <textarea id="prompt">The creature lunges forward and snaps its jaws, then returns to its starting pose. Side view, static locked camera, plain studio background, 3D render.</textarea>
+    <textarea id="prompt">The creature lunges forward and snaps its jaws, then returns to its starting pose.</textarea>
     <div class="row"><div style="flex: 0 1 160px"><label>Candidates</label><select id="count"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></div></div>
     <button id="generate">Generate</button><span class="status" id="genStatus"></span>
     <div class="grid" id="candidates"></div>
@@ -118,7 +119,7 @@ $("generate").onclick = async () => {
   $("candidates").innerHTML = "";
   picked = null;
   $("s3").classList.add("off");
-  const pose = { action: $("action").value, frame: $("frame").value, grounded: $("grounded").checked, auto_rig: $("autorig").checked };
+  const pose = { action: $("action").value, frame: $("frame").value, grounded: $("grounded").checked, auto_rig: $("autorig").checked, split_screen: $("split").checked };
   try {
     const { jobs } = await post("/api/generate", { creature, prompt: $("prompt").value, count: $("count").value, ...pose });
     $("genStatus").textContent = "Rendering the creature and generating video...";
@@ -146,7 +147,7 @@ $("capture").onclick = async () => {
   try {
     const { job } = await post("/api/capture", {
       creature, clip: picked, action: $("action").value, frame: $("frame").value, grounded: $("grounded").checked,
-      auto_rig: $("autorig").checked, name: $("name").value, loop: $("loop").checked });
+      auto_rig: $("autorig").checked, split_screen: $("split").checked, name: $("name").value, loop: $("loop").checked });
     const files = await waitJob(job, s => $("capStatus").textContent = `Tracking, fitting the skeleton and cleaning up... ${s}s`);
     $("capStatus").textContent = "Done.";
     const name = $("name").value;
