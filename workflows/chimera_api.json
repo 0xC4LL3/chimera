@@ -5,7 +5,8 @@
    "model_file": "3d/dragon.glb",
    "start_action": "DragonArmature|Dragon_Flying",
    "start_frame": 0,
-   "grounded": false
+   "grounded": false,
+   "auto_rig": false
   }
  },
  "unet": {

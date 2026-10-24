@@ -52,15 +52,19 @@ class LoadCreature(IO.ComfyNode):
                 IO.String.Input("start_action", default="", tooltip="Animation whose first frame is the starting pose; empty for the rest pose."),
                 IO.Int.Input("start_frame", default=0, min=0),
                 IO.Boolean.Input("grounded", default=True, tooltip="Creature stands on the ground: the capture keeps it above the floor and locks feet that touch it."),
+                IO.Boolean.Input("auto_rig", default=False, tooltip="The model has no rig: build a skeleton and skin weights for it with SkinTokens first."),
             ],
             outputs=[Run.Output(display_name="run"), IO.Image.Output(display_name="reference")],
         )
 
     @classmethod
-    def execute(cls, model_file, start_action, start_frame, grounded):
+    def execute(cls, model_file, start_action, start_frame, grounded, auto_rig=False):
         glb = folder_paths.get_annotated_filepath(model_file)
         run = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(glb).stem}_{time.strftime('%Y%m%d_%H%M%S')}")
         os.makedirs(run)
+        if auto_rig:
+            python("autorig.py", glb, os.path.join(run, "rigged.glb"), vram_gb=12)
+            glb = os.path.join(run, "rigged.glb")
         json.dump({"glb": glb, "grounded": grounded}, open(os.path.join(run, "run.json"), "w"))
         blender("render_ref.py", glb, run, *([start_action, str(start_frame)] if start_action else []))
         blender("dump_rig.py", glb, run)
