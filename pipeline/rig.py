@@ -120,7 +120,9 @@ def render_from_camera(cam_info, out, n_frames, transparent=True):
     prefs.get_devices()
     for d in prefs.devices:
         d.use = d.type == "CUDA"
-    scene.cycles.device, scene.cycles.samples, scene.cycles.use_denoising = "GPU", 16, False
+    # Few samples are enough for a check render; persistent data skips rebuilding the scene per frame.
+    scene.cycles.device, scene.cycles.samples, scene.cycles.use_denoising = "GPU", 4, False
+    scene.render.use_persistent_data = True
     scene.render.resolution_x, scene.render.resolution_y = cam_info["width"], cam_info["height"]
     scene.render.film_transparent = transparent
     scene.view_settings.view_transform = "Standard"

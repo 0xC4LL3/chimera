@@ -28,4 +28,5 @@ center = sum((b.head_local for b in arm.data.bones), Vector()) / len(arm.data.bo
 cam = bpy.context.scene.camera
 cam.matrix_world = Matrix.Translation(center) @ Matrix.Rotation(math.radians(60), 4, "Z") @ Matrix.Translation(-center) @ cam.matrix_world
 bpy.context.scene.render.filepath = os.path.join(out + "_turned", "")
+bpy.context.scene.render.resolution_percentage = 50  # only for looking at
 bpy.ops.render.render(animation=True)

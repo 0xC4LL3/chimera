@@ -33,7 +33,7 @@ for i in range(n):
     cv2.putText(over, f"IoU {ious[-1]:.2f}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
     panels = [f, over]
     if turned:
-        t = cv2.imread(turned[i], cv2.IMREAD_UNCHANGED).astype(float)
+        t = cv2.resize(cv2.imread(turned[i], cv2.IMREAD_UNCHANGED), (w, h)).astype(float)
         a = t[..., 3:] / 255
         panels.append((t[..., :3] * a + 90 * (1 - a)).astype(np.uint8))
     writer.write(np.hstack(panels))
