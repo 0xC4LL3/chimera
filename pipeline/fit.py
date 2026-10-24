@@ -1,8 +1,9 @@
 # Fit the rig to a generated clip through the known camera.
 # Usage: python pipeline/fit.py <run_dir> <video.mp4> <out_pose.npz> [tracks.npz] [--grounded]
-# Reads rig.npz and camera.json from run_dir. Solves frames in order, each starting from the
-# previous solution (frame 0 starts at the known reference pose). Per frame it optimises one
-# rotation offset per bone plus a translation per root bone. Data terms:
+# Reads rig.npz and camera.json from run_dir. Solves windows of WIN frames in order, all frames of
+# a window together (one batch on the GPU, much faster than frame by frame) and each window starting
+# from the last solved frame (frame 0 starts at the known reference pose). Per frame it optimises
+# one rotation offset per bone plus a translation per root bone. Data terms:
 #   - silhouette: a two-way chamfer; projected surface samples outside the mask are pulled in,
 #     and mask pixels pull the nearest sample towards them;
 #   - point tracks (from track.py): each tracked frame-0 pixel is tied to the visible surface
@@ -28,7 +29,7 @@ args = [a for a in sys.argv[1:] if not a.startswith("--")]
 run, video, out = args[:3]
 tracks_path = args[3] if len(args) > 3 else None
 grounded = "--grounded" in sys.argv
-ITERS, N_SURF, N_MASK, N_TRACK, POSE_VAR = 300, 4000, 1500, 1500, 0.999
+WIN, ITERS, N_SURF, N_MASK, N_TRACK, POSE_VAR = 8, 150, 4000, 1500, 1500, 0.999
 W = dict(cover=1.0, track=0.5, smooth=3.0, pose=300.0, attach=1000.0, depth=300.0, sym=3.0, floor=1e4)
 W.update(json.loads(os.environ.get("FIT_WEIGHTS", "{}")))  # for tuning experiments
 
@@ -90,9 +91,9 @@ sym_mirror = R0[sym_a].transpose(1, 2) @ torch.diag(T([-1.0, 1.0, 1.0])) @ R0[sy
 
 def symmetry(mats):
     # Rotation change of each bone since rest, seen from its pair's common ancestor; L vs mirrored R.
-    R = mats[:, :3, :3]
-    Ra = R[sym_a].transpose(1, 2)
-    cl, cr = Ra @ R[sym_l] @ sym_rest_l, Ra @ R[sym_r] @ sym_rest_r
+    R = mats[..., :3, :3]
+    Ra = R[..., sym_a, :, :].transpose(-1, -2)
+    cl, cr = Ra @ R[..., sym_l, :, :] @ sym_rest_l, Ra @ R[..., sym_r, :, :] @ sym_rest_r
     return (cl - sym_mirror @ cr @ sym_mirror).pow(2).sum()
 
 
@@ -110,17 +111,18 @@ def surface_samples(n, seed):
 
 
 fidx, bary = surface_samples(N_SURF, 0)
-at = lambda v, fi, b: (v[faces[fi]] * b[:, :, None]).sum(1)
+at = lambda v, fi, b: (v[..., faces[fi], :] * b[..., None]).sum(-2)
 
 
 def basis_of(rot, trans):
     # Reference basis with a rotation offset per bone; root translations folded into root bases.
-    R = torch.eye(4, device=dev).repeat(B, 1, 1)
-    R[:, :3, :3] = rodrigues(rot)
+    # Works on one frame (B,3)/(R,3) or many (K,B,3)/(K,R,3).
+    R = torch.eye(4, device=dev).repeat(*rot.shape[:-1], 1, 1)
+    R[..., :3, :3] = rodrigues(rot)
     basis = ref_basis @ R
-    Tm = torch.eye(4, device=dev).repeat(len(roots), 1, 1)
-    Tm[:, :3, 3] = trans
-    basis[roots] = torch.linalg.inv(rest[roots]) @ Tm @ rest[roots] @ basis[roots]
+    Tm = torch.eye(4, device=dev).repeat(*trans.shape[:-1], 1, 1)
+    Tm[..., :3, 3] = trans
+    basis[..., roots, :, :] = torch.linalg.inv(rest[roots]) @ Tm @ rest[roots] @ basis[..., roots, :, :]
     return basis
 
 
@@ -154,48 +156,58 @@ while True:
     frames.append(f)
 H, Wd = frames[0].shape[:2]
 
+huber = torch.nn.functional.huber_loss
 rot = torch.zeros(B, 3, device=dev)
 trans = torch.zeros(len(roots), 3, device=dev)
 result, joints, t0 = [], [], time.time()
-for i, f in enumerate(frames):
-    m = mask_of(f)
-    dt = torch.tensor(cv2.distanceTransform(1 - m, cv2.DIST_L2, 5), device=dev)[None, None]
-    ys, xs = np.nonzero(m)
-    sel = np.random.default_rng(i).choice(len(xs), min(N_MASK, len(xs)), replace=False)
-    mpix = T(np.stack([xs[sel], ys[sel]], 1))
-    prev_rot, prev_trans = rot.clone(), trans.clone()
-    rot.requires_grad_(True)
-    trans.requires_grad_(True)
+for w0 in range(0, len(frames), WIN):
+    ids = list(range(w0, min(w0 + WIN, len(frames))))
+    K = len(ids)
+    dts, mpix = [], []
+    for i in ids:
+        m = mask_of(frames[i])
+        dts.append(torch.tensor(cv2.distanceTransform(1 - m, cv2.DIST_L2, 5), device=dev)[None])
+        ys, xs = np.nonzero(m)
+        sel = np.random.default_rng(i).choice(len(xs), N_MASK, replace=len(xs) < N_MASK)
+        mpix.append(T(np.stack([xs[sel], ys[sel]], 1)))
+    dts, mpix = torch.stack(dts), torch.stack(mpix)
+    prev_rot, prev_trans = rot, trans
+    rot = prev_rot.expand(K, B, 3).clone().requires_grad_(True)  # each window starts at the last solved frame
+    trans = prev_trans.expand(K, len(roots), 3).clone().requires_grad_(True)
+    if tracks_path:
+        txy, tvis = track_xy[ids], track_vis[ids].float()[..., None]
     opt = torch.optim.Adam([rot, trans], lr=0.01)
     for it in range(ITERS):
         v, mats = skin(basis_of(rot, trans))
         s3 = at(v, fidx, bary)
         s = project(s3)
-        grid = torch.stack([s[:, 0] / (Wd - 1), s[:, 1] / (H - 1)], 1) * 2 - 1
-        loss = torch.nn.functional.grid_sample(dt, grid[None, None], align_corners=True).mean()
-        loss = loss + W["cover"] * torch.cdist(mpix, s).min(1).values.mean()
-        loss = loss + W["smooth"] * ((rot - prev_rot).pow(2).sum() + (trans - prev_trans).pow(2).sum())
-        loss = loss + W["depth"] * (((mats[:, :3, 3] - ref_joints) @ axis) / size).pow(2).mean()
+        grid = torch.stack([s[..., 0] / (Wd - 1), s[..., 1] / (H - 1)], -1) * 2 - 1
+        loss = torch.nn.functional.grid_sample(dts, grid[:, None], align_corners=True).mean((1, 2, 3)).sum()
+        loss = loss + W["cover"] * torch.cdist(mpix, s).min(2).values.mean(1).sum()
+        all_rot, all_trans = torch.cat([prev_rot[None], rot]), torch.cat([prev_trans[None], trans])
+        loss = loss + W["smooth"] * ((all_rot[1:] - all_rot[:-1]).pow(2).sum() + (all_trans[1:] - all_trans[:-1]).pow(2).sum())
+        loss = loss + W["depth"] * (((mats[..., :3, 3] - ref_joints) @ axis) / size).pow(2).mean(1).sum()
         loss = loss + W["sym"] * symmetry(mats)
         if pose_prior:
-            x = rot[1:].reshape(-1) - pose_mean
-            loss = loss + W["pose"] * (x - pose_dirs @ (pose_dirs.T @ x)).pow(2).sum()
+            x = rot[:, 1:].reshape(K, -1) - pose_mean
+            loss = loss + W["pose"] * (x - (x @ pose_dirs) @ pose_dirs.T).pow(2).sum()
         if att_off is not None:
-            pos = (mats[att_bone, :3, :3] @ att_off[:, :, None])[..., 0] + mats[att_bone, :3, 3]
-            loss = loss + W["attach"] * ((pos - mats[att_root, :3, 3]) / size).pow(2).sum()
+            pos = (mats[:, att_bone, :3, :3] @ att_off[..., None])[..., 0] + mats[:, att_bone, :3, 3]
+            loss = loss + W["attach"] * ((pos - mats[:, att_root, :3, 3]) / size).pow(2).sum()
         if grounded:
-            loss = loss + W["floor"] * (torch.relu(floor - s3[:, 2]) / size).pow(2).mean()
+            loss = loss + W["floor"] * (torch.relu(floor - s3[..., 2]) / size).pow(2).mean(1).sum()
         if tracks_path:
-            d = project(at(v, tfidx, tbary))[track_vis[i]] - track_xy[i][track_vis[i]]
-            loss = loss + W["track"] * torch.nn.functional.huber_loss(d, torch.zeros_like(d), delta=3.0, reduction="sum") / max(len(d), 1)
+            d = project(at(v, tfidx, tbary)) - txy
+            per = (huber(d, torch.zeros_like(d), delta=3.0, reduction="none") * tvis).sum((1, 2))
+            loss = loss + W["track"] * (per / tvis.sum((1, 2)).clamp(min=1)).sum()
         opt.zero_grad()
         loss.backward()
         opt.step()
     rot, trans = rot.detach(), trans.detach()
-    result.append(basis_of(rot, trans).cpu().numpy())
-    joints.append(mats[:, :3, 3].detach().cpu().numpy())
-    if i % 12 == 0:
-        print(f"frame {i}: loss {loss.item():.2f} ({time.time() - t0:.0f}s)", flush=True)
+    result += list(basis_of(rot, trans).cpu().numpy())
+    joints += list(mats[..., :3, 3].detach().cpu().numpy())
+    rot, trans = rot[-1], trans[-1]
+    print(f"frames {ids[0]}-{ids[-1]}: loss {loss.item() / K:.2f} per frame ({time.time() - t0:.0f}s)", flush=True)
 
 np.savez(out, basis=np.array(result), joints=np.array(joints), names=names)
 print("wrote", out)
