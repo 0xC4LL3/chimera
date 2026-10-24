@@ -66,10 +66,7 @@ for o in scene.objects:
 srgb = [c ** (1 / 2.2) for c in total / max(area, 1e-8)]
 saturation = (max(srgb) - min(srgb)) / max(max(srgb), 1e-8)
 bg = (0.6, 0.6, 0.6) if saturation > 0.25 else (0.1, 0.6, 0.15)
-world = bpy.data.worlds.new("W")
-world.use_nodes = True
-world.node_tree.nodes["Background"].inputs[0].default_value = (*bg, 1)
-scene.world = world
+rig.backdrop(bg)
 sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
 sun.data.energy = 3
 sun.rotation_euler = (math.radians(40), math.radians(20), math.radians(60))

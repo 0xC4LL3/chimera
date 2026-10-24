@@ -34,8 +34,5 @@ for l in action.layers:
                     k.handle_left.x -= f0
                     k.handle_right.x -= f0
 
-world = bpy.data.worlds.new("W")
-world.use_nodes = True
-world.node_tree.nodes["Background"].inputs[0].default_value = (*cam["background"], 1)
-scene.world = world
+rig.backdrop(cam["background"])
 rig.render_from_camera(cam, os.path.join(run, "clip"), f1 - f0 + 1, transparent=False)

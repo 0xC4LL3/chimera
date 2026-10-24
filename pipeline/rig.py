@@ -152,6 +152,24 @@ def load(glb):
     return arm, actions
 
 
+def backdrop(color):
+    # A world that shows `color` behind the creature but lights it neutral gray, so a chroma green
+    # backdrop does not tint the creature.
+    world = bpy.data.worlds.new("W")
+    world.use_nodes = True
+    nt = world.node_tree
+    light = nt.nodes["Background"]
+    light.inputs[0].default_value = (0.6, 0.6, 0.6, 1)
+    seen = nt.nodes.new("ShaderNodeBackground")
+    seen.inputs[0].default_value = (*color, 1)
+    path, mix = nt.nodes.new("ShaderNodeLightPath"), nt.nodes.new("ShaderNodeMixShader")
+    nt.links.new(path.outputs["Is Camera Ray"], mix.inputs[0])
+    nt.links.new(light.outputs[0], mix.inputs[1])
+    nt.links.new(seen.outputs[0], mix.inputs[2])
+    nt.links.new(mix.outputs[0], nt.nodes["World Output"].inputs[0])
+    bpy.context.scene.world = world
+
+
 def render_from_camera(cam_info, out, n_frames, transparent=True):
     # Render frames 0..n-1 from the saved reference camera, by default with a transparent background;
     # a split-screen camera (render_ref.py --split) renders every view and puts them side by side.
