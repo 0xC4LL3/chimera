@@ -4,8 +4,8 @@
 # cameras and the fitter's symmetry assume; export.py turns the motion back for the user's file.
 # Animations are re-keyed from their recorded world-space pose, because applying a
 # rotation to an armature recomputes bone rolls and would invalidate the original keys.
-import bpy, os, sys, math
-import numpy as np
+import bpy, os, sys, math, shutil
+import cv2, numpy as np
 from mathutils import Matrix
 from scipy.spatial import cKDTree
 
@@ -153,8 +153,22 @@ def load(glb):
 
 
 def render_from_camera(cam_info, out, n_frames, transparent=True):
-    # Render frames 0..n-1 from the saved reference camera, by default with a transparent background.
+    # Render frames 0..n-1 from the saved reference camera, by default with a transparent background;
+    # a split-screen camera (render_ref.py --split) renders every view and puts them side by side.
     # Also saves <out>/fit.blend for inspection.
+    if cam_info.get("views"):
+        dirs = [f"{out}_view{i}" for i in range(len(cam_info["views"]))]
+        for d, v in zip(dirs, cam_info["views"]):
+            render_from_camera({**cam_info, "cam_to_world": v["cam_to_world"], "width": v["box"][1] - v["box"][0], "views": None},
+                               d, n_frames, transparent)
+        os.makedirs(out, exist_ok=True)
+        for f in sorted(os.listdir(dirs[0])):
+            if f.endswith(".png"):
+                cv2.imwrite(os.path.join(out, f), np.hstack([cv2.imread(os.path.join(d, f), cv2.IMREAD_UNCHANGED) for d in dirs]))
+        for d in dirs:
+            shutil.rmtree(d)
+        bpy.context.scene.render.resolution_x = cam_info["width"]
+        return
     os.makedirs(out, exist_ok=True)
     scene = bpy.context.scene
     cam_data = bpy.data.cameras.new("Cam")
@@ -163,10 +177,11 @@ def render_from_camera(cam_info, out, n_frames, transparent=True):
     cam.matrix_world = Matrix(cam_info["cam_to_world"])
     scene.collection.objects.link(cam)
     scene.camera = cam
-    sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
-    sun.data.energy = 3
-    sun.rotation_euler = (0.7, 0.35, 1.05)
-    scene.collection.objects.link(sun)
+    if not any(o.type == "LIGHT" for o in scene.objects):
+        sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
+        sun.data.energy = 3
+        sun.rotation_euler = (0.7, 0.35, 1.05)
+        scene.collection.objects.link(sun)
     # Cycles on the GPU: Eevee falls back to software OpenGL under WSL (~10 s per frame).
     scene.render.engine = "CYCLES"
     prefs = bpy.context.preferences.addons["cycles"].preferences
