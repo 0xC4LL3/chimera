@@ -41,8 +41,9 @@ def load(glb):
         if (o.type == "MESH" and o.parent is None) or (o.type == "EMPTY" and o.name.endswith("_end")):
             bpy.data.objects.remove(o)  # stray meshes and glTF leaf markers
     arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
-    for t in list(arm.animation_data.nla_tracks):
-        arm.animation_data.nla_tracks.remove(t)
+    anim = arm.animation_data_create()  # also for rigs that come without animations
+    for t in list(anim.nla_tracks):
+        anim.nla_tracks.remove(t)
     actions = list(bpy.data.actions)
     bones = list(arm.pose.bones)  # parents come before children
 
