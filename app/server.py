@@ -2,7 +2,7 @@
 # The same code runs against local ComfyUI (via comfy-api-proxy), Comfy Cloud or a Comfy API
 # deployment; only COMFY_BASE_URL (and COMFY_API_KEY for hosted backends) changes.
 # Run: COMFY_BASE_URL=http://127.0.0.1:8189 app/.venv/bin/uvicorn server:app --app-dir app --port 8000
-import random, shutil, uuid
+import json, random, shutil, struct, uuid
 from pathlib import Path
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
@@ -51,13 +51,25 @@ def submit(wf):
     return job.id
 
 
-@app.post("/api/creature")
-def upload_creature(file: UploadFile):
+def model_info(path):
+    # Whether the model has a skeleton, and its animations (possible starting poses), from the glTF JSON.
+    data = path.read_bytes()
+    doc = json.loads(data[20:20 + struct.unpack_from("<I", data, 12)[0]] if data[:4] == b"glTF" else data)
+    return {"bones": sum(len(s["joints"]) for s in doc.get("skins", [])),
+            "animations": [a.get("name", f"Animation {i + 1}") for i, a in enumerate(doc.get("animations", []))]}
+
+
+def add_creature(name, src):
     creature = uuid.uuid4().hex[:8]
     (DATA / creature).mkdir()
-    with open(DATA / creature / Path(file.filename).name, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    return {"creature": creature}
+    with open(DATA / creature / Path(name).name, "wb") as f:
+        shutil.copyfileobj(src, f)
+    return {"creature": creature, **model_info(creature_path(creature))}
+
+
+@app.post("/api/creature")
+def upload_creature(file: UploadFile):
+    return add_creature(file.filename, file.file)
 
 
 @app.post("/api/generate")
