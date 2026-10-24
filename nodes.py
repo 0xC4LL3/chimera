@@ -64,7 +64,13 @@ class LoadCreature(IO.ComfyNode):
         run = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(glb).stem}_{time.strftime('%Y%m%d_%H%M%S')}")
         os.makedirs(run)
         if auto_rig:
-            python("autorig.py", glb, os.path.join(run, "rigged.glb"), vram_gb=12)
+            for attempt in range(3):  # SkinTokens now and then decodes a malformed skeleton; a new try decodes afresh
+                try:
+                    python("autorig.py", glb, os.path.join(run, "rigged.glb"), vram_gb=12)
+                    break
+                except RuntimeError:
+                    if attempt == 2:
+                        raise
             glb = os.path.join(run, "rigged.glb")
         json.dump({"glb": glb, "grounded": grounded}, open(os.path.join(run, "run.json"), "w"))
         python("facing.py", glb, run, vram_gb=3)
