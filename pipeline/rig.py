@@ -116,10 +116,16 @@ def load(glb):
         pb.matrix_basis.identity()
     scene.frame_set(0)
 
-    # Meshes parented to a bone (eyes, props) become meshes skinned fully to that bone.
+    # Meshes parented to a bone (eyes, props), directly or through empties, become meshes skinned
+    # fully to that bone.
     for o in bpy.data.objects:
-        if o.parent_type == "BONE":
-            o.vertex_groups.new(name=o.parent_bone).add(range(len(o.data.vertices)), 1.0, "REPLACE")
+        if o.type != "MESH" or any(m.type == "ARMATURE" for m in o.modifiers):
+            continue
+        p = o
+        while p and p.parent_type != "BONE":
+            p = p.parent
+        if p:
+            o.vertex_groups.new(name=p.parent_bone).add(range(len(o.data.vertices)), 1.0, "REPLACE")
             o.modifiers.new("Armature", "ARMATURE").object = arm
     bake(arm, pre)
     for o in list(bpy.data.objects):
