@@ -12,6 +12,7 @@ HERE = Path(__file__).parent
 WORKFLOWS = HERE.parent / "workflows"
 DATA = HERE / "data"  # uploaded creatures and downloaded results
 DATA.mkdir(exist_ok=True)
+SAMPLES = HERE / "samples"  # Quaternius (CC0) and Scenario (CC BY 4.0) creatures
 
 comfy = Comfy(timeout=120)
 app = FastAPI()
@@ -72,6 +73,15 @@ def upload_creature(file: UploadFile):
     return add_creature(file.filename, file.file)
 
 
+@app.post("/api/sample/{name}")
+def sample_creature(name: str):
+    path = SAMPLES / f"{Path(name).name}.glb"
+    if not path.exists():
+        raise HTTPException(404, "unknown sample")
+    with open(path, "rb") as f:
+        return add_creature(path.name, f)
+
+
 @app.post("/api/generate")
 def generate(creature: str = Form(), prompt: str = Form(), action: str = Form(""), frame: int = Form(0),
              grounded: bool = Form(True), auto_rig: bool = Form(False), split_screen: bool = Form(True),
@@ -117,4 +127,5 @@ def job_status(job_id: str):
 
 
 app.mount("/data", StaticFiles(directory=DATA), name="data")
+app.mount("/samples", StaticFiles(directory=SAMPLES), name="samples")
 app.mount("/", StaticFiles(directory=HERE / "static", html=True), name="static")
