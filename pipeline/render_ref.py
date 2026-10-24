@@ -1,15 +1,20 @@
 # Render the reference frame of a rigged GLB from a fixed side camera.
-# Usage: python pipeline/render_ref.py <in.glb> <out_dir> [action] [frame]
-# Writes ref.png and camera.json (intrinsics, camera matrix, 2D joint positions).
+# Usage: python pipeline/render_ref.py <in.glb> <out_dir> [action] [frame] [--split]
+# --split: a split screen instead, side view on the left and front view on the right, so the video
+# shows the creature from two angles at once (the creature faces -Y, the glTF convention).
+# Writes ref.png and camera.json (intrinsics, camera matrix, 2D joint positions). With --split,
+# camera.json also lists both views, each with intrinsics in full-frame pixels and its x range.
 import bpy, sys, json, os, math
+import cv2, numpy as np
 from mathutils import Vector
 from bpy_extras.object_utils import world_to_camera_view
 
 sys.path.append(os.path.dirname(__file__))
 import rig
 
+split = "--split" in sys.argv
 glb, out = rig.args()[:2]
-rest = rig.args()[2:]
+rest = [a for a in rig.args()[2:] if a != "--split"]
 action = rest[0] if rest else None
 frame = int(rest[1]) if len(rest) > 1 else 0
 W, H = 1024, 576  # LTX needs sizes divisible by 32
@@ -34,17 +39,18 @@ lo = Vector((min(p[i] for p in pts) for i in range(3)))
 hi = Vector((max(p[i] for p in pts) for i in range(3)))
 center, size = (lo + hi) / 2, (hi - lo)
 
-# Side camera on +X looking at -X. Leave room so the action can leave the rest bounds.
+# Side camera on +X looking at -X (and front camera on -Y looking at +Y). Leave room so the action
+# can leave the rest bounds.
+PW = W // 2 if split else W  # panel width
 cam_data = bpy.data.cameras.new("Cam")
 cam_data.lens, cam_data.sensor_width, cam_data.sensor_fit = 50, 36, "HORIZONTAL"
 cam = bpy.data.objects.new("Cam", cam_data)
 scene.collection.objects.link(cam)
-fov = 2 * math.atan(18 / 50)
-extent = max(size.y, size.z * W / H) * 1.5
-dist = extent / 2 / math.tan(fov / 2) + size.x / 2
-cam.location = center + Vector((dist, 0, 0))
-cam.rotation_euler = (math.pi / 2, 0, math.pi / 2)
 scene.camera = cam
+fov = 2 * math.atan(18 / 50)
+views = [((1, 0, 0), size.y, size.x, (math.pi / 2, 0, math.pi / 2))]
+if split:
+    views.append(((0, -1, 0), size.x, size.y, (math.pi / 2, 0, 0)))
 
 # Plain background that contrasts with the creature, so masks separate cleanly in the video:
 # neutral gray for a colourful creature, chroma green for a grayish one.
@@ -70,24 +76,36 @@ sun.rotation_euler = (math.radians(40), math.radians(20), math.radians(60))
 scene.collection.objects.link(sun)
 
 scene.render.engine = "BLENDER_EEVEE"
-scene.render.resolution_x, scene.render.resolution_y = W, H
+scene.render.resolution_x, scene.render.resolution_y = PW, H
 scene.render.resolution_percentage = 100
 scene.view_settings.view_transform = "Standard"
-scene.render.filepath = os.path.join(out, "ref.png")
-bpy.ops.render.render(write_still=True)
-
-bpy.context.view_layer.update()
-f = cam_data.lens / cam_data.sensor_width * W
-joints = {}
-for pb in arm.pose.bones:
-    p = world_to_camera_view(scene, cam, arm.matrix_world @ pb.head)
-    joints[pb.name] = [p.x * W, (1 - p.y) * H]
+f = cam_data.lens / cam_data.sensor_width * PW
+panels, cams = [], []
+for i, (d, width, depth, rot) in enumerate(views):
+    extent = max(width, size.z * PW / H) * 1.5
+    cam.location = center + Vector(d) * (extent / 2 / math.tan(fov / 2) + depth / 2)
+    cam.rotation_euler = rot
+    scene.render.filepath = os.path.join(out, f"view{i}.png")
+    bpy.ops.render.render(write_still=True)
+    panels.append(scene.render.filepath)
+    bpy.context.view_layer.update()
+    x0 = i * PW
+    cams.append({"K": [[f, 0, x0 + PW / 2], [0, f, H / 2], [0, 0, 1]], "cam_to_world": [list(r) for r in cam.matrix_world],
+                 "box": [x0, x0 + PW]})  # Blender camera: -Z forward, +Y up
+    if i == 0:
+        joints = {}
+        for pb in arm.pose.bones:
+            p = world_to_camera_view(scene, cam, arm.matrix_world @ pb.head)
+            joints[pb.name] = [p.x * PW, (1 - p.y) * H]
+cv2.imwrite(os.path.join(out, "ref.png"), np.hstack([cv2.imread(p) for p in panels]))
+for p in panels:
+    os.remove(p)
 json.dump({
     "width": W, "height": H,
-    "K": [[f, 0, W / 2], [0, f, H / 2], [0, 0, 1]],
-    "cam_to_world": [list(r) for r in cam.matrix_world],  # Blender camera: -Z forward, +Y up
+    "K": cams[0]["K"], "cam_to_world": cams[0]["cam_to_world"],
     "lens": cam_data.lens, "sensor_width": cam_data.sensor_width,
     "action": action, "frame": frame, "background": list(bg),
     "joints2d": joints,
+    **({"views": cams} if split else {}),
 }, open(os.path.join(out, "camera.json"), "w"), indent=1)
 print("wrote", out)
