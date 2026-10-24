@@ -74,7 +74,7 @@ class CaptureMotion(IO.ComfyNode):
         return IO.Schema(
             node_id="ChimeraCaptureMotion", display_name="Capture Motion (Chimera)", category="chimera",
             description="Fit the creature's own skeleton to the video: silhouettes and point tracks through the known camera. "
-                        "Then check the result is a pose the rig's own animations could make.",
+                        "Then check how well the result explains the clip.",
             inputs=[Run.Input("run"), IO.Video.Input("video")],
             outputs=[Run.Output(display_name="run"), IO.String.Output(display_name="check")],
             is_output_node=True,
@@ -91,14 +91,17 @@ class CaptureMotion(IO.ComfyNode):
         python("track.py", clip, os.path.join(run, "tracks.npz"), vram_gb=9)
         python("fit.py", run, clip, os.path.join(run, "pose.npz"), os.path.join(run, "tracks.npz"),
                *(["--grounded"] if run_info(run)["grounded"] else []), vram_gb=2)
-        report = json.loads(python("check.py", run, os.path.join(run, "pose.npz")))
+        report = json.loads(python("check.py", run, os.path.join(run, "pose.npz"), clip))
         json.dump(report, open(os.path.join(run, "check.json"), "w"))
         if report["ok"]:
-            text = "Check passed: every frame is a pose this creature's own animations could make."
+            text = f"Check passed: the captured rig matches the clip (overlap {report['mean_overlap']:.2f})."
+        elif report["max_turn_deg"] > 45:
+            text = (f"Warning: a limb turned {report['max_turn_deg']:.0f} degrees towards the camera, probably to fake "
+                    "a shape the rig cannot make. Look at the turned view, or try another clip.")
         else:
-            first, last = report["bad_frames"]
-            text = (f"Warning: frames {first}-{last} hold poses this creature's animations never make, so the "
-                    "captured motion is probably wrong in depth. Look at the turned view, or try another clip.")
+            text = (f"Warning: the rig could not follow the clip around frame {report['worst_frame']} (overlap "
+                    f"{report['min_overlap']:.2f}). The action may be one this rig cannot make, or seen end-on. "
+                    "Try another clip.")
         open(os.path.join(run, "check.txt"), "w").write(text)  # as a file too: API clients only receive files
         sub = os.path.relpath(run, folder_paths.get_output_directory())
         return IO.NodeOutput(run, text, ui={"text": [text], "files": [{"filename": "check.txt", "subfolder": sub, "type": "output"}]})
