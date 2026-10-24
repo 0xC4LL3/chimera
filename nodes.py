@@ -26,8 +26,10 @@ def blender(script, *args):
     call([sys.executable, os.path.join(PIPELINE, script), *args])
 
 
-def python(script, *args):
-    mm.unload_all_models()  # the torch steps need the GPU memory the video model was holding
+def python(script, *args, vram_gb=1):
+    # The torch steps run in their own process: free just the GPU memory they need from the models
+    # ComfyUI holds (mostly the video model), so the next generation has less to load back.
+    mm.free_memory(vram_gb * 2**30, mm.get_torch_device())
     mm.soft_empty_cache()
     return call([sys.executable, os.path.join(PIPELINE, script), *args])
 
@@ -86,9 +88,9 @@ class CaptureMotion(IO.ComfyNode):
         shutil.copytree(creature, run)
         clip = os.path.join(run, "clip.mp4")
         video.save_to(clip)
-        python("track.py", clip, os.path.join(run, "tracks.npz"))
+        python("track.py", clip, os.path.join(run, "tracks.npz"), vram_gb=9)
         python("fit.py", run, clip, os.path.join(run, "pose.npz"), os.path.join(run, "tracks.npz"),
-               *(["--grounded"] if run_info(run)["grounded"] else []))
+               *(["--grounded"] if run_info(run)["grounded"] else []), vram_gb=2)
         report = json.loads(python("check.py", run, os.path.join(run, "pose.npz")))
         json.dump(report, open(os.path.join(run, "check.json"), "w"))
         if report["ok"]:
