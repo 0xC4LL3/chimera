@@ -67,6 +67,7 @@ class LoadCreature(IO.ComfyNode):
             python("autorig.py", glb, os.path.join(run, "rigged.glb"), vram_gb=12)
             glb = os.path.join(run, "rigged.glb")
         json.dump({"glb": glb, "grounded": grounded}, open(os.path.join(run, "run.json"), "w"))
+        python("facing.py", glb, run, vram_gb=3)
         blender("render_ref.py", glb, run, *([start_action, str(start_frame)] if start_action else []), *(["--split"] if split_screen else []))
         blender("dump_rig.py", glb, run)
         ref = np.asarray(Image.open(os.path.join(run, "ref.png")).convert("RGB"), dtype=np.float32) / 255

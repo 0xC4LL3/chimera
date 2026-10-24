@@ -20,7 +20,7 @@ frame = int(rest[1]) if len(rest) > 1 else 0
 W, H = 1024, 576  # LTX needs sizes divisible by 32
 os.makedirs(out, exist_ok=True)
 
-arm, _ = rig.load(glb)
+arm, _ = rig.load(glb, out)
 scene = bpy.context.scene
 arm.animation_data.action = bpy.data.actions[action] if action else None
 if not action:

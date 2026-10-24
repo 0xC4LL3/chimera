@@ -1,13 +1,13 @@
 # Shared Blender helper: load a rigged GLB with object transforms baked into the data,
 # so armature space equals world space and the skeleton and mesh share one unit scale.
-# The creature is also turned to face -Y with its mirror plane at x=0 (see facing), which the
-# cameras and the fitter's symmetry assume; export.py turns the motion back for the user's file.
+# Given the run folder, the creature is also turned to face -Y with its mirror plane at x=0, as
+# facing.py found, which the cameras and the fitter's symmetry assume; export.py turns the motion
+# back for the user's file.
 # Animations are re-keyed from their recorded world-space pose, because applying a
 # rotation to an armature recomputes bone rolls and would invalidate the original keys.
-import bpy, os, sys, math, shutil
+import bpy, os, sys, json, shutil
 import cv2, numpy as np
 from mathutils import Matrix
-from scipy.spatial import cKDTree
 
 
 def args():
@@ -37,50 +37,7 @@ def bake(arm, pre=Matrix.Identity(4)):
             o.matrix_parent_inverse.identity()
 
 
-def facing():
-    # The turn about the vertical (and shift across) that makes the creature face -Y with its mirror
-    # plane at x=0. The mirror plane is the vertical plane through the mesh's centre that best maps
-    # the mesh onto itself, so its normal is the left-right axis. The front: along the plane, the mesh
-    # near the plane (body, head, tail; not wings or legs) is a profile whose taller end is the head,
-    # as tails taper; when neither end is clearly taller, -Y as glTF prescribes.
-    # A mesh with no clear mirror plane is left as it is.
-    deps = bpy.context.evaluated_depsgraph_get()
-    pts = []
-    for o in bpy.data.objects:
-        if o.type == "MESH":
-            ev = o.evaluated_get(deps)
-            pts += [ev.matrix_world @ v.co for v in ev.to_mesh().vertices]
-    pts = np.array(pts)[::max(1, len(pts) // 2000)]
-    center = pts.mean(0)
-    p = pts - center
-    size = np.linalg.norm(p.max(0) - p.min(0))
-    tree = cKDTree(p)
-
-    def mismatch(a):
-        n = np.array([math.cos(a), math.sin(a), 0])
-        return tree.query(p - 2 * np.outer(p @ n, n))[0].mean() / size
-
-    angles = np.radians(np.arange(0, 180, 1.0))
-    scores = [mismatch(a) for a in angles]
-    a = angles[int(np.argmin(scores))]
-    if min(scores) > 0.02:
-        return Matrix.Identity(4)
-    a = round(a / (math.pi / 2)) * (math.pi / 2) if abs(a - round(a / (math.pi / 2)) * (math.pi / 2)) < math.radians(3) else a
-    n = np.array([math.cos(a), math.sin(a), 0])
-    f = np.array([-n[1], n[0], 0])  # along the mirror plane: forward or backward
-    mid = p[np.abs(p @ n) < 0.05 * size]
-    d = mid @ f
-    ends = [np.ptp(mid[d > d.max() - 0.2 * np.ptp(d), 2]), np.ptp(mid[d < d.min() + 0.2 * np.ptp(d), 2])]
-    if max(ends) > 1.3 * min(ends):
-        f = f if ends[0] > ends[1] else -f
-    else:
-        f = f if f[1] < 0 else -f
-    turn = Matrix.Rotation(-math.pi / 2 - math.atan2(f[1], f[0]), 4, "Z")
-    x = (turn @ Matrix.Translation(center)).translation.x
-    return Matrix.Translation((-x, 0, 0)) @ turn
-
-
-def load(glb):
+def load(glb, run=None):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=glb, guess_original_bind_pose=False)  # rest = glTF node pose
     scene = bpy.context.scene
@@ -97,7 +54,8 @@ def load(glb):
     for pb in bones:
         pb.matrix_basis.identity()
     bpy.context.view_layer.update()
-    pre = facing()
+    face = run and os.path.join(run, "facing.json")
+    pre = Matrix([json.load(open(face))["pre"][i:i + 4] for i in range(0, 16, 4)]) if face and os.path.exists(face) else Matrix.Identity(4)
     arm["pre"] = [x for row in pre for x in row]  # for undoing the turn on export
 
     # Record the world-space pose of every bone on every frame of every action.

@@ -14,7 +14,7 @@ cam_info = json.load(open(os.path.join(run, "camera.json")))
 os.makedirs(out, exist_ok=True)
 data = np.load(pose)
 
-arm, _ = rig.load(glb)
+arm, _ = rig.load(glb, run)
 arm.animation_data.action = bpy.data.actions.new("Fit")
 for i, frame in enumerate(data["basis"]):
     for name, m in zip(data["names"], frame):

@@ -17,7 +17,7 @@ MAX_TRIS = 50000
 
 glb, run = rig.args()[:2]
 cam = json.load(open(os.path.join(run, "camera.json")))
-arm, _ = rig.load(glb)
+arm, _ = rig.load(glb, run)
 meshes = [o for o in bpy.data.objects if o.type == "MESH"]
 for o in meshes:
     o.data.calc_loop_triangles()

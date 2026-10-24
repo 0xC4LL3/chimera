@@ -11,7 +11,7 @@ import rig
 
 glb, run = rig.args()[:2]
 cam = json.load(open(os.path.join(run, "camera.json")))
-arm, _ = rig.load(glb)
+arm, _ = rig.load(glb, run)
 action = bpy.data.actions[cam["action"]]
 arm.animation_data.action = action
 scene = bpy.context.scene
