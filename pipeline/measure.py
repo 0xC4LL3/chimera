@@ -3,7 +3,7 @@
 # The video mask is "differs from the plain background"; the rig mask is the render's alpha.
 # Prints mean IoU and writes a clip: video | rig overlay (rig red, video creature blue)
 # | the rig from the turned camera, when given.
-import sys, glob, cv2, numpy as np
+import sys, glob, av, cv2, numpy as np
 
 video, fit, out = sys.argv[1:4]
 turned = sorted(glob.glob(f"{sys.argv[4]}/*.png")) if len(sys.argv) > 4 else []
@@ -17,7 +17,9 @@ while True:
 renders = sorted(glob.glob(f"{fit}/*.png"))
 n = min(len(frames), len(renders))
 h, w = frames[0].shape[:2]
-writer = cv2.VideoWriter(out, cv2.VideoWriter_fourcc(*"mp4v"), 24, (w * (3 if turned else 2), h))
+container = av.open(out, "w")  # H.264, so browsers can play it
+stream = container.add_stream("libx264", rate=24)
+stream.width, stream.height, stream.pix_fmt = w * (3 if turned else 2), h, "yuv420p"
 ious = []
 for i in range(n):
     f = frames[i]
@@ -36,7 +38,9 @@ for i in range(n):
         t = cv2.resize(cv2.imread(turned[i], cv2.IMREAD_UNCHANGED), (w, h)).astype(float)
         a = t[..., 3:] / 255
         panels.append((t[..., :3] * a + 90 * (1 - a)).astype(np.uint8))
-    writer.write(np.hstack(panels))
-writer.release()
+    frame = av.VideoFrame.from_ndarray(np.ascontiguousarray(np.hstack(panels)[..., ::-1]), format="rgb24")
+    container.mux(stream.encode(frame))
+container.mux(stream.encode())
+container.close()
 print(f"frames={n} mean_iou={np.mean(ious):.3f} min_iou={np.min(ious):.3f} first={ious[0]:.3f}")
 print("per-frame:", " ".join(f"{x:.2f}" for x in ious))
