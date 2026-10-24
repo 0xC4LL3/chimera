@@ -20,7 +20,10 @@
 #   - depth: joints moving along the camera axis, which neither data term can see, cost a little;
 #   - symmetry: left/right bone pairs mirror each other a little, mostly for the far-side limbs
 #     the camera barely sees. Pairs are found from the rest pose (a bone whose head and direction
-#     mirror another's across x=0), so any bone names work; assumes a rig symmetric about x=0;
+#     mirror another's across x=0), so any bone names work; assumes a rig symmetric about x=0.
+#     Bones on the centre line (spine, neck, tail) are their own mirror image, so relative to their
+#     parent they may bend up and down but not roll or turn sideways, a motion the side camera
+#     barely sees (a rolled body raises one wing and drops the other);
 #   - floor (--grounded): no part of the mesh may sink below the lowest point of the reference;
 #   - feet (--grounded): a foot near the floor lies flat as in the reference pose and does not
 #     slide, and no sole sinks below its reference height. Feet are the bones with at least half
@@ -107,15 +110,19 @@ def feet(v, prev):
 heads, dirs = rest[:, :3, 3], rest[:, :3, 1]
 flip = T([-1.0, 1.0, 1.0])
 mismatch = torch.cdist(heads * flip, heads) / size + 1 - (dirs * flip) @ dirs.T
+mid = torch.diagonal(mismatch) < 0.03
 mismatch.fill_diagonal_(torch.inf)
 sym_l, sym_r, sym_a = [], [], []
 for i in range(B):
+    if mid[i]:  # a centre bone, compared with itself in its parent's frame (the world for a root)
+        sym_l.append(i), sym_r.append(i), sym_a.append(parents[i])
     j = int(mismatch[i].argmin())
     if heads[i, 0] > 0.01 * size and mismatch[i, j] < 0.03:  # i on the +x side, j its mirror image
         anc = next((a for a in chain(i) if a in chain(j)), None)
         if anc is not None:  # pairs in separate hierarchies are IK controls; attachment covers them
             sym_l.append(i), sym_r.append(j), sym_a.append(anc)
-R0 = rest[:, :3, :3]
+eye = torch.eye(3, device=dev)
+R0 = torch.cat([rest[:, :3, :3], eye[None]])  # index -1 (no parent) is the world
 sym_rest_l = (R0[sym_a].transpose(1, 2) @ R0[sym_l]).transpose(1, 2)
 sym_rest_r = (R0[sym_a].transpose(1, 2) @ R0[sym_r]).transpose(1, 2)
 sym_mirror = R0[sym_a].transpose(1, 2) @ torch.diag(T([-1.0, 1.0, 1.0])) @ R0[sym_a]
@@ -123,7 +130,7 @@ sym_mirror = R0[sym_a].transpose(1, 2) @ torch.diag(T([-1.0, 1.0, 1.0])) @ R0[sy
 
 def symmetry(mats):
     # Rotation change of each bone since rest, seen from its pair's common ancestor; L vs mirrored R.
-    R = mats[..., :3, :3]
+    R = torch.cat([mats[..., :3, :3], eye.expand(*mats.shape[:-3], 1, 3, 3)], -3)
     Ra = R[..., sym_a, :, :].transpose(-1, -2)
     cl, cr = Ra @ R[..., sym_l, :, :] @ sym_rest_l, Ra @ R[..., sym_r, :, :] @ sym_rest_r
     return (cl - sym_mirror @ cr @ sym_mirror).pow(2).sum()
