@@ -4,89 +4,200 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chimera</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
 <style>
-  :root { --bg: #14161a; --panel: #1d2026; --line: #2c3038; --text: #e8e6e3; --dim: #9a9ea6; --accent: #e0703a; }
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --sunken: #efede8; --line: #e4e1da; --text: #1b1a17; --muted: #75716a;
+    --accent: #e8572e; --accent-ink: #ffffff; --raised: #ffffff; --shadow: 0 1px 2px rgba(30, 25, 15, .05), 0 8px 24px rgba(30, 25, 15, .06);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111110; --surface: #1a1a18; --sunken: #141413; --line: #2a2926; --text: #eeece7; --muted: #8f8b83;
+      --accent: #ff6a3d; --accent-ink: #1a0d07; --raised: #34332f; --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25); color-scheme: dark; }
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
-  main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 80px; }
-  h1 { font-size: 28px; margin: 0; letter-spacing: 0.5px; }
-  .tag { color: var(--dim); margin: 4px 0 28px; }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 18px; }
-  section.off { opacity: 0.45; pointer-events: none; }
-  h2 { font-size: 16px; margin: 0 0 14px; } h2 span { color: var(--accent); margin-right: 8px; }
-  label { display: block; color: var(--dim); font-size: 13px; margin: 10px 0 4px; }
-  input[type=text], input[type=number], textarea, select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
-  textarea { min-height: 70px; resize: vertical; }
-  .row { display: flex; gap: 14px; flex-wrap: wrap; } .row > * { flex: 1 1 200px; }
-  .check { display: flex; align-items: center; gap: 8px; color: var(--text); margin-top: 14px; }
-  button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer; margin-top: 14px; }
-  button:disabled { opacity: 0.5; cursor: default; }
-  .status { color: var(--dim); margin-left: 12px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-top: 16px; }
-  .card { border: 2px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
-  .card.picked { border-color: var(--accent); }
-  .card video, .result video { width: 100%; display: block; }
-  .card .wait { aspect-ratio: 16/9; display: grid; place-items: center; color: var(--dim); }
-  .card button { width: calc(100% - 20px); margin: 10px; }
-  model-viewer { width: 100%; height: 360px; background: var(--bg); border-radius: 8px; }
-  .result { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 800px) { .result { grid-template-columns: 1fr; } }
-  .downloads a { color: var(--accent); margin-right: 16px; font-weight: 600; }
-  #check.warn { color: #f0b429; font-weight: 600; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1160px; margin: 0 auto; padding: 28px 24px 64px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 40px; }
+  .mark { font: italic 30px/1 "Instrument Serif", serif; letter-spacing: .2px; cursor: pointer; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Start */
+  .hero { text-align: center; margin: 48px auto 36px; max-width: 640px; }
+  h1 { font: 400 54px/1.05 "Instrument Serif", serif; margin: 0 0 14px; letter-spacing: -.5px; }
+  .hero p { color: var(--muted); font-size: 17px; margin: 0; }
+  .drop { display: grid; place-items: center; gap: 6px; max-width: 760px; margin: 0 auto; padding: 56px 24px; text-align: center;
+    background: var(--surface); border: 1.5px dashed var(--line); border-radius: 20px; cursor: pointer; transition: border-color .2s, background .2s; }
+  .drop:hover, body.dragging .drop { border-color: var(--accent); }
+  .drop svg { color: var(--accent); margin-bottom: 6px; }
+  .drop strong { font-weight: 600; font-size: 16px; }
+  .drop span { color: var(--muted); font-size: 14px; }
+  .samples { max-width: 760px; margin: 28px auto 0; }
+  .samples p { color: var(--muted); font-size: 13px; text-align: center; margin: 0 0 12px; }
+  .samples div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .sample { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 10px 8px; transition: transform .2s, box-shadow .2s; }
+  .sample:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .sample img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; }
+  .sample span { display: block; font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  /* Studio */
+  .studio { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  .stage { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
+  .stage model-viewer { display: block; width: 100%; height: 470px; --poster-color: transparent; }
+  .chip { position: absolute; top: 14px; left: 14px; font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: 99px;
+    background: var(--sunken); color: var(--muted); border: 1px solid var(--line); }
+  .change { position: absolute; top: 12px; right: 12px; font-size: 13px; color: var(--muted); padding: 5px 10px; border-radius: 99px; }
+  .change:hover { color: var(--text); background: var(--sunken); }
+  .pose { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  select { flex: 1; font: inherit; color: var(--text); background: var(--sunken); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+  .label { font-size: 13px; font-weight: 500; color: var(--muted); }
+  textarea { width: 100%; min-height: 132px; resize: vertical; font: 17px/1.5 Inter, sans-serif; color: var(--text); background: var(--sunken);
+    border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .ideas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -6px; }
+  .ideas button { font-size: 13px; color: var(--muted); padding: 5px 11px; border: 1px solid var(--line); border-radius: 99px; }
+  .ideas button:hover { color: var(--text); border-color: var(--muted); }
+  .seg { display: inline-flex; align-self: flex-start; justify-self: start; background: var(--sunken); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
+  .seg button { font-size: 14px; padding: 7px 14px; border-radius: 9px; color: var(--muted); transition: background .15s, color .15s; }
+  .seg button.on { background: var(--raised); color: var(--text); box-shadow: var(--shadow); }
+  details { font-size: 14px; }
+  summary { color: var(--muted); cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "+"; width: 14px; text-align: center; }
+  details[open] summary::before { content: "−"; }
+  .opts { display: grid; grid-template-columns: auto 1fr; gap: 12px 16px; align-items: center; margin-top: 14px; color: var(--muted); }
+  .switch { position: relative; width: 38px; height: 22px; background: var(--line); border-radius: 99px; transition: background .2s; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .switch.on { background: var(--accent); } .switch.on::after { transform: translateX(16px); }
+  .go { background: var(--accent); color: var(--accent-ink); font-weight: 600; font-size: 16px; padding: 14px; border-radius: 14px; transition: filter .15s, opacity .15s; }
+  .go:hover { filter: brightness(1.06); } .go:disabled { opacity: .45; cursor: default; filter: none; }
+
+  /* Takes */
+  .takes { margin-top: 40px; }
+  .takes-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+  h2 { font: 400 30px/1 "Instrument Serif", serif; margin: 0; }
+  .takes-head span { color: var(--muted); font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; }
+  .take { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; text-align: left; transition: transform .2s, box-shadow .2s; }
+  .take.ready { cursor: pointer; } .take.ready:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .media { aspect-ratio: 16 / 9; background: var(--sunken); position: relative; overflow: hidden; }
+  .media video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .media.busy::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .08) 50%, transparent 70%);
+    animation: sheen 1.6s infinite; }
+  @keyframes sheen { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .meta { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; font-size: 14px; }
+  .meta b { font-weight: 500; } .meta span { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .take.ready .meta span { color: var(--accent); font-weight: 500; }
+  .take.miss .meta span { color: var(--muted); font-weight: 400; }
+  .note { color: var(--muted); font-size: 14px; margin-top: 16px; }
+  .note button { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* Result */
+  dialog { width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; border: 1px solid var(--line); border-radius: 22px;
+    background: var(--surface); color: var(--text); box-shadow: 0 24px 80px rgba(0, 0, 0, .35); }
+  dialog::backdrop { background: rgba(10, 10, 9, .55); backdrop-filter: blur(4px); }
+  .result { display: grid; grid-template-columns: 3fr 2fr; }
+  .result model-viewer { display: block; width: 100%; height: min(560px, 60vh); background: var(--sunken); }
+  .side { padding: 26px; display: flex; flex-direction: column; gap: 18px; }
+  .side h3 { font: 400 26px/1.15 "Instrument Serif", serif; margin: 0; padding-right: 36px; }
+  .downloads { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: auto; }
+  .downloads a { text-align: center; text-decoration: none; color: var(--text); font-weight: 600; font-size: 14px; padding: 11px 0; border: 1px solid var(--line); border-radius: 12px; }
+  .downloads a:first-child { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .downloads a:hover { filter: brightness(1.06); }
+  #compare { width: 100%; display: block; border-radius: 12px; background: var(--sunken); }
+  .close { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); font-size: 18px; line-height: 1; z-index: 2; }
+  footer { margin-top: 64px; text-align: center; color: var(--muted); font-size: 12px; }
+
+  @media (max-width: 860px) {
+    h1 { font-size: 40px; }
+    .stage model-viewer { height: 340px; }
+    .studio, .result { grid-template-columns: 1fr; }
+    .samples div { grid-template-columns: repeat(2, 1fr); }
+    .grid { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 <main>
-  <h1>Chimera</h1>
-  <p class="tag">Type an action, get engine-ready animation on your own creature's skeleton.</p>
+  <header><div class="mark" id="home">Chimera</div></header>
 
-  <section id="s1">
-    <h2><span>1</span>Creature</h2>
-    <div class="row">
-      <div><label>Model (.glb)</label><input type="file" id="model" accept=".glb,.gltf"></div>
-      <div><label>Starting pose: animation name (empty for rest pose)</label><input type="text" id="action" placeholder="e.g. DragonArmature|Dragon_Flying"></div>
-      <div style="flex: 0 1 120px"><label>Frame</label><input type="number" id="frame" value="0" min="0"></div>
+  <section id="start">
+    <div class="hero">
+      <h1>Bring any creature to life</h1>
+      <p>Drop in a 3D model, describe a move and get a game-ready animation on its own skeleton.</p>
     </div>
-    <label class="check"><input type="checkbox" id="grounded" checked>Stands on the ground (untick for flying or swimming creatures)</label>
-    <label class="check"><input type="checkbox" id="autorig">My model has no rig (build one automatically; may need a retry or manual fixes)</label>
-    <label class="check"><input type="checkbox" id="split" checked>Film from the side and the front at once (captures depth better; untick for a single side view)</label>
-    <model-viewer id="preview" camera-controls hidden></model-viewer>
+    <label class="drop">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5 3.5 7v10L12 21.5 20.5 17V7L12 2.5Z"/><path d="M3.5 7 12 11.5 20.5 7M12 11.5v10"/></svg>
+      <strong>Drop a .glb model here</strong>
+      <span>or click to browse · rigged or not</span>
+      <input type="file" id="file" accept=".glb,.gltf" hidden>
+    </label>
+    <div class="samples">
+      <p>Or start with one of these</p>
+      <div id="samples"></div>
+    </div>
   </section>
 
-  <section id="s2" class="off">
-    <h2><span>2</span>Action</h2>
-    <label>Describe the motion</label>
-    <textarea id="prompt">The creature lunges forward and snaps its jaws, then returns to its starting pose.</textarea>
-    <div class="row"><div style="flex: 0 1 160px"><label>Candidates</label><select id="count"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></div></div>
-    <button id="generate">Generate</button><span class="status" id="genStatus"></span>
-    <div class="grid" id="candidates"></div>
-  </section>
-
-  <section id="s3" class="off">
-    <h2><span>3</span>Capture</h2>
-    <div class="row"><div><label>Clip name</label><input type="text" id="name" value="attack"></div></div>
-    <label class="check"><input type="checkbox" id="loop" checked>Loop: end on the starting pose</label>
-    <button id="capture">Capture motion</button><span class="status" id="capStatus"></span>
-  </section>
-
-  <section id="s4" class="off">
-    <h2><span>4</span>Result</h2>
-    <div class="result">
-      <div><label>Generated clip with the captured rig overlaid</label><video id="overlay" controls loop muted></video></div>
-      <div><label>Your rig, animated</label>
-        <model-viewer id="result" camera-controls autoplay></model-viewer>
-        <select id="clipSel"></select>
+  <section id="studio" hidden>
+    <div class="studio">
+      <div class="stage">
+        <model-viewer id="preview" camera-controls auto-rotate interaction-prompt="none" shadow-intensity="0.8" environment-image="neutral" exposure="1.05"></model-viewer>
+        <span class="chip" id="rigChip"></span>
+        <button class="change" id="change">Change model</button>
+        <div class="pose" id="poseRow" hidden><span>Start from</span><select id="pose"></select></div>
+      </div>
+      <div class="panel">
+        <span class="label">Describe a move</span>
+        <textarea id="prompt" placeholder="Rears up on its hind legs and roars, then settles back down."></textarea>
+        <div class="ideas" id="ideas"></div>
+        <div class="seg" id="ground"><button class="on" data-v="1">On the ground</button><button data-v="0">Flying or swimming</button></div>
+        <details>
+          <summary>More options</summary>
+          <div class="opts">
+            <span>Takes</span><div class="seg" id="count"><button data-v="1">1</button><button data-v="2">2</button><button class="on" data-v="3">3</button><button data-v="4">4</button></div>
+            <span>Two camera angles</span><button class="switch on" id="split" aria-label="Two camera angles" title="Film the side and the front together: the motion is captured more accurately."></button>
+          </div>
+        </details>
+        <button class="go" id="go" disabled>Animate</button>
       </div>
     </div>
-    <p id="check"></p>
-    <p class="downloads" id="downloads"></p>
+
+    <div class="takes" id="takes" hidden>
+      <div class="takes-head"><h2>Takes</h2><span id="takesStatus"></span></div>
+      <div class="grid" id="grid"></div>
+      <p class="note" id="note" hidden></p>
+    </div>
   </section>
+
+  <footer>Sample models by Quaternius (CC0) and Scenario (CC BY 4.0) · Built on ComfyUI and LTX-2</footer>
 </main>
+
+<dialog id="detail">
+  <button class="close" id="close" aria-label="Close">×</button>
+  <div class="result">
+    <model-viewer id="result" camera-controls autoplay camera-orbit="-30deg 78deg auto" shadow-intensity="0.8" environment-image="neutral" interaction-prompt="none"></model-viewer>
+    <div class="side">
+      <h3 id="resultTitle"></h3>
+      <div class="seg" id="motion"><button class="on" data-v="">Root motion</button><button data-v="_inplace">In place</button></div>
+      <video id="compare" autoplay loop muted playsinline></video>
+      <div class="downloads" id="downloads"></div>
+    </div>
+  </div>
+</dialog>
+
 <script>
 const $ = id => document.getElementById(id);
-let creature = null, picked = null;
+const SAMPLES = [["dragon", "Dragon"], ["wolf", "Wolf"], ["frog", "Frog · no rig"], ["fox", "Fox · no rig"]];
+const IDEAS = ["Roars and stomps", "Leaps forward and lands", "Shakes its whole body"];
+let creature = null, info = null, takes = [], showAll = false, clock = null;
 
-async function post(url, fields) {
+async function post(url, fields = {}) {
   const body = new FormData();
   for (const [k, v] of Object.entries(fields)) body.append(k, v);
   const r = await fetch(url, { method: "POST", body });
@@ -94,78 +205,168 @@ async function post(url, fields) {
   return r.json();
 }
 
-async function waitJob(id, onTick) {
-  const start = Date.now();
+async function waitJob(id, onRunning) {
   for (;;) {
     const j = await (await fetch(`/api/job/${id}`)).json();
     if (j.status === "succeeded") return j.files;
-    if (j.status === "failed" || j.status === "cancelled") throw new Error(j.error || j.status);
-    onTick && onTick(Math.round((Date.now() - start) / 1000));
-    await new Promise(r => setTimeout(r, 3000));
+    if (["failed", "canceled", "expired"].includes(j.status)) throw new Error(j.error || j.status);
+    if (onRunning && /run|progress/i.test(j.status)) { onRunning(); onRunning = null; }
+    await new Promise(r => setTimeout(r, 2500));
   }
 }
 
-$("model").onchange = async () => {
-  const file = $("model").files[0];
-  if (!file) return;
-  $("preview").src = URL.createObjectURL(file);
-  $("preview").hidden = false;
-  creature = (await post("/api/creature", { file })).creature;
-  $("s2").classList.remove("off");
+function segmented(el, onChange) {
+  el.querySelectorAll("button").forEach(b => b.onclick = () => {
+    el.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    onChange && onChange(b.dataset.v);
+  });
+}
+const segValue = el => el.querySelector(".on").dataset.v;
+
+// Creature
+async function useCreature(previewUrl, register) {
+  $("start").hidden = true;
+  $("studio").hidden = false;
+  $("takes").hidden = true;
+  $("preview").src = previewUrl;
+  $("rigChip").textContent = "Reading model…";
+  $("go").disabled = true;
+  info = await register();
+  creature = info.creature;
+  $("rigChip").textContent = info.bones ? `${info.bones} bones` : "Will be auto-rigged";
+  $("poseRow").hidden = !info.animations.length;
+  $("pose").innerHTML = `<option value="">Rest pose</option>` +
+    info.animations.map(a => `<option value="${a}">${a.split("|").pop().replace(/_/g, " ")}</option>`).join("");
+  updateGo();
+}
+
+function pickFile(file) {
+  if (file) useCreature(URL.createObjectURL(file), () => post("/api/creature", { file }));
+}
+$("file").onchange = () => pickFile($("file").files[0]);
+document.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("dragging"); });
+document.addEventListener("dragleave", e => { if (!e.relatedTarget) document.body.classList.remove("dragging"); });
+document.addEventListener("drop", e => { e.preventDefault(); document.body.classList.remove("dragging"); pickFile(e.dataTransfer.files[0]); });
+
+$("samples").innerHTML = SAMPLES.map(([id, name]) =>
+  `<button class="sample" data-id="${id}"><img src="/thumbs/${id}.png" alt=""><span>${name}</span></button>`).join("");
+$("samples").querySelectorAll(".sample").forEach(b => b.onclick = () =>
+  useCreature(`/samples/${b.dataset.id}.glb`, () => post(`/api/sample/${b.dataset.id}`)));
+$("change").onclick = $("home").onclick = () => { $("studio").hidden = true; $("start").hidden = false; $("file").value = ""; };
+
+// Move
+$("ideas").innerHTML = IDEAS.map(i => `<button>${i}</button>`).join("");
+$("ideas").querySelectorAll("button").forEach(b => b.onclick = () => {
+  $("prompt").value = `The creature ${b.textContent.toLowerCase()}, then returns to its starting pose.`;
+  updateGo();
+});
+segmented($("ground")); segmented($("count"));
+$("split").onclick = () => $("split").classList.toggle("on");
+const updateGo = () => $("go").disabled = !creature || !$("prompt").value.trim();
+$("prompt").oninput = updateGo;
+$("prompt").onkeydown = e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !$("go").disabled) $("go").click(); };
+
+function clipName(prompt) {
+  const skip = new Set("the a an its it his her their and then to of with creature back down starting pose returns return into on in at".split(" "));
+  const words = prompt.toLowerCase().match(/[a-z]+/g) || [];
+  return words.filter(w => !skip.has(w)).slice(0, 3).join("_") || "action";
+}
+
+// Takes
+const fmt = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+function render() {
+  const done = takes.filter(t => t.state === "done" || t.state === "error");
+  const good = takes.filter(t => t.state === "done" && t.pass).sort((a, b) => b.overlap - a.overlap);
+  const busy = takes.filter(t => t.state !== "done" && t.state !== "error");
+  const misses = takes.filter(t => (t.state === "done" && !t.pass) || t.state === "error");
+  const grid = $("grid");
+  [...good, ...busy, ...(showAll ? misses : [])].forEach(t => grid.append(t.el));
+  misses.forEach(t => { if (!showAll) t.el.remove(); });
+  takes.forEach(t => {
+    const span = t.el.querySelector(".meta span");
+    const s = Math.round((Date.now() - t.since) / 1000);
+    span.textContent = t.state === "queue" ? "In queue" : t.state === "waitcap" ? "Capture queued" : t.state === "video" ? `Filming · ${fmt(s)}` :
+      t.state === "capture" ? `Capturing motion · ${fmt(s)}` : t.state === "error" ? "Failed" : t.pass ? "Open" : "Poor fit";
+  });
+  const note = $("note");
+  note.hidden = !misses.length || busy.length > 0 && !showAll;
+  if (misses.length) {
+    note.innerHTML = showAll ? `<button>Hide takes that didn't fit</button>` :
+      `${good.length ? "" : "No take fit your creature well. Try again or reword the move. "}` +
+      `${misses.length} ${misses.length > 1 ? "takes" : "take"} hidden because the skeleton couldn't follow the video. <button>Show</button>`;
+    note.querySelector("button").onclick = () => { showAll = !showAll; render(); };
+  }
+  $("takesStatus").textContent = busy.length ? `${done.length} of ${takes.length} ready` : "";
+  if (!busy.length) { clearInterval(clock); $("go").disabled = false; $("go").textContent = "Animate again"; }
+}
+
+async function runTake(t, genId, fields) {
+  try {
+    const clip = await waitJob(genId, () => { t.state = "video"; t.since = Date.now(); render(); });
+    t.clip = clip[0];
+    t.el.querySelector(".media").innerHTML = `<video src="${t.clip}" autoplay loop muted playsinline></video>`;
+    t.state = "waitcap"; render();
+    const { job } = await post("/api/capture", { ...fields, clip: genId, loop: true });
+    t.files = await waitJob(job, () => { t.state = "capture"; t.since = Date.now(); render(); });
+    t.report = await (await fetch(t.files.find(f => f.endsWith(".txt")))).text();
+    t.pass = t.report.startsWith("Check passed");
+    t.overlap = parseFloat((t.report.match(/overlap ([\d.]+)/) || [0, 0])[1]);
+    t.state = "done";
+    t.el.querySelector(".media").classList.remove("busy");
+    t.el.classList.add("ready");
+    t.el.classList.toggle("miss", !t.pass);
+    t.el.onclick = () => openTake(t, fields.name);
+  } catch (e) {
+    t.state = "error";
+    t.el.querySelector(".media").classList.remove("busy");
+  }
+  render();
+}
+
+$("go").onclick = async () => {
+  const prompt = $("prompt").value.trim();
+  const fields = { creature, action: $("pose").value, frame: 0, grounded: segValue($("ground")) === "1",
+    auto_rig: !info.bones, split_screen: $("split").classList.contains("on"), name: clipName(prompt) };
+  $("go").disabled = true;
+  $("grid").innerHTML = ""; $("note").hidden = true; showAll = false;
+  $("takes").hidden = false;
+  try {
+    const { jobs } = await post("/api/generate", { ...fields, prompt, count: segValue($("count")) });
+    takes = jobs.map((id, i) => {
+      const el = document.createElement("div");
+      el.className = "take";
+      el.innerHTML = `<div class="media busy"></div><div class="meta"><b>Take ${i + 1}</b><span></span></div>`;
+      return { el, state: "queue", since: Date.now() };
+    });
+    jobs.forEach((id, i) => runTake(takes[i], id, fields));
+    clearInterval(clock); clock = setInterval(render, 1000);
+    render();
+    $("takes").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (e) {
+    $("takesStatus").textContent = "Couldn't start: " + e.message;
+    $("go").disabled = false;
+  }
 };
 
-$("generate").onclick = async () => {
-  $("generate").disabled = true;
-  $("candidates").innerHTML = "";
-  picked = null;
-  $("s3").classList.add("off");
-  const pose = { action: $("action").value, frame: $("frame").value, grounded: $("grounded").checked, auto_rig: $("autorig").checked, split_screen: $("split").checked };
-  try {
-    const { jobs } = await post("/api/generate", { creature, prompt: $("prompt").value, count: $("count").value, ...pose });
-    $("genStatus").textContent = "Rendering the creature and generating video...";
-    await Promise.all(jobs.map(async (id, i) => {
-      const card = document.createElement("div");
-      card.className = "card";
-      card.innerHTML = `<div class="wait">Candidate ${i + 1}: queued</div>`;
-      $("candidates").append(card);
-      const files = await waitJob(id, s => card.firstChild.textContent = `Candidate ${i + 1}: ${s}s`);
-      card.innerHTML = `<video src="${files[0]}" autoplay loop muted playsinline></video><button>Use this clip</button>`;
-      card.querySelector("button").onclick = () => {
-        document.querySelectorAll(".card").forEach(c => c.classList.remove("picked"));
-        card.classList.add("picked");
-        picked = id;
-        $("s3").classList.remove("off");
-      };
-    }));
-    $("genStatus").textContent = "Pick the clip that best keeps your creature's anatomy.";
-  } catch (e) { $("genStatus").textContent = "Failed: " + e.message; }
-  $("generate").disabled = false;
-};
-
-$("capture").onclick = async () => {
-  $("capture").disabled = true;
-  try {
-    const { job } = await post("/api/capture", {
-      creature, clip: picked, action: $("action").value, frame: $("frame").value, grounded: $("grounded").checked,
-      auto_rig: $("autorig").checked, split_screen: $("split").checked, name: $("name").value, loop: $("loop").checked });
-    const files = await waitJob(job, s => $("capStatus").textContent = `Tracking, fitting the skeleton and cleaning up... ${s}s`);
-    $("capStatus").textContent = "Done.";
-    const name = $("name").value;
-    $("overlay").src = files.find(f => f.includes("/save_overlay_"));
-    $("overlay").play();
-    $("result").src = files.find(f => f.endsWith(".glb"));
-    $("clipSel").innerHTML = `<option>${name}</option><option>${name}_inplace</option>`;
-    $("clipSel").onchange = () => $("result").animationName = $("clipSel").value;
-    $("result").addEventListener("load", () => { $("result").animationName = name; $("result").play(); }, { once: true });
-    const report = await (await fetch(files.find(f => f.endsWith(".txt")))).text();
-    $("check").textContent = report;
-    $("check").className = report.startsWith("Warning") ? "warn" : "";
-    $("downloads").innerHTML = files.filter(f => /\.(glb|fbx|bvh)$/.test(f))
-      .map(f => `<a href="${f}" download>${f.split(".").pop().toUpperCase()}</a>`).join("");
-    $("s4").classList.remove("off");
-  } catch (e) { $("capStatus").textContent = "Failed: " + e.message; }
-  $("capture").disabled = false;
-};
+// Result
+function openTake(t, name) {
+  $("resultTitle").textContent = $("prompt").value.trim();
+  const result = $("result");
+  result.src = t.files.find(f => f.endsWith(".glb"));
+  const play = v => { result.animationName = name + v; result.play(); };
+  segmented($("motion"), play);
+  $("motion").querySelectorAll("button").forEach((b, i) => b.classList.toggle("on", i === 0));
+  result.addEventListener("load", () => play(""), { once: true });
+  $("compare").src = t.clip;
+  $("downloads").innerHTML = ["fbx", "glb", "bvh"].map(ext => {
+    const f = t.files.find(x => x.endsWith("." + ext));
+    return f ? `<a href="${f}" download="${name}.${ext}">${ext.toUpperCase()}</a>` : "";
+  }).join("");
+  $("detail").showModal();
+}
+$("close").onclick = () => $("detail").close();
+$("detail").onclick = e => { if (e.target === $("detail")) $("detail").close(); };
 </script>
 </body>
 </html>
