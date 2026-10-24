@@ -77,11 +77,9 @@ class CaptureMotion(IO.ComfyNode):
     def define_schema(cls):
         return IO.Schema(
             node_id="ChimeraCaptureMotion", display_name="Capture Motion (Chimera)", category="chimera",
-            description="Fit the creature's own skeleton to the video: silhouettes and point tracks through the known camera. "
-                        "Then check how well the result explains the clip.",
+            description="Fit the creature's own skeleton to the video: silhouettes and point tracks through the known camera.",
             inputs=[Run.Input("run"), IO.Video.Input("video")],
-            outputs=[Run.Output(display_name="run"), IO.String.Output(display_name="check")],
-            is_output_node=True,
+            outputs=[Run.Output(display_name="run")],
         )
 
     @classmethod
@@ -95,7 +93,24 @@ class CaptureMotion(IO.ComfyNode):
         python("track.py", clip, os.path.join(run, "tracks.npz"), vram_gb=9)
         python("fit.py", run, clip, os.path.join(run, "pose.npz"), os.path.join(run, "tracks.npz"),
                *(["--grounded"] if run_info(run)["grounded"] else []), vram_gb=2)
-        report = json.loads(python("check.py", run, os.path.join(run, "pose.npz"), clip))
+        return IO.NodeOutput(run)
+
+
+class CleanupMotion(IO.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return IO.Schema(
+            node_id="ChimeraCleanupMotion", display_name="Creature Cleanup (Chimera)", category="chimera",
+            description="Smooth the motion and close the loop. Then check how well the result explains the clip.",
+            inputs=[Run.Input("run"), IO.Boolean.Input("loop", default=True, tooltip="Make the last frame match the first.")],
+            outputs=[Run.Output(display_name="run"), IO.String.Output(display_name="check")],
+            is_output_node=True,
+        )
+
+    @classmethod
+    def execute(cls, run, loop):
+        python("cleanup.py", run, os.path.join(run, "pose.npz"), os.path.join(run, "clean.npz"), *(["--loop"] if loop else []))
+        report = json.loads(python("check.py", run, os.path.join(run, "clean.npz"), os.path.join(run, "clip.mp4")))
         json.dump(report, open(os.path.join(run, "check.json"), "w"))
         if report["ok"]:
             text = f"Check passed: the captured rig matches the clip (overlap {report['mean_overlap']:.2f})."
@@ -109,23 +124,6 @@ class CaptureMotion(IO.ComfyNode):
         open(os.path.join(run, "check.txt"), "w").write(text)  # as a file too: API clients only receive files
         sub = os.path.relpath(run, folder_paths.get_output_directory())
         return IO.NodeOutput(run, text, ui={"text": [text], "files": [{"filename": "check.txt", "subfolder": sub, "type": "output"}]})
-
-
-class CleanupMotion(IO.ComfyNode):
-    @classmethod
-    def define_schema(cls):
-        return IO.Schema(
-            node_id="ChimeraCleanupMotion", display_name="Creature Cleanup (Chimera)", category="chimera",
-            description="Smooth the motion, close the loop and lock planted feet (for grounded creatures).",
-            inputs=[Run.Input("run"), IO.Boolean.Input("loop", default=True, tooltip="Make the last frame match the first.")],
-            outputs=[Run.Output(display_name="run")],
-        )
-
-    @classmethod
-    def execute(cls, run, loop):
-        args = (["--loop"] if loop else []) + (["--contacts", "auto"] if run_info(run)["grounded"] else [])
-        python("cleanup.py", run, os.path.join(run, "pose.npz"), os.path.join(run, "clean.npz"), *args)
-        return IO.NodeOutput(run)
 
 
 class ExportAnimation(IO.ComfyNode):
