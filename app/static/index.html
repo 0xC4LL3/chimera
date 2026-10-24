@@ -292,10 +292,11 @@ function render() {
   const note = $("note");
   note.hidden = !misses.length || busy.length > 0 && !showAll;
   if (misses.length) {
-    note.innerHTML = showAll ? `<button>Hide takes that didn't fit</button>` :
+    const failed = takes.every(t => t.state === "error");
+    note.innerHTML = failed ? "Something went wrong preparing this model. Try again, or try another model." : showAll ? `<button>Hide takes that didn't fit</button>` :
       `${good.length ? "" : "No take fit your creature well. Try again or reword the move. "}` +
       `${misses.length} ${misses.length > 1 ? "takes" : "take"} hidden because the skeleton couldn't follow the video. <button>Show</button>`;
-    note.querySelector("button").onclick = () => { showAll = !showAll; render(); };
+    if (!failed) note.querySelector("button").onclick = () => { showAll = !showAll; render(); };
   }
   $("takesStatus").textContent = busy.length ? `${done.length} of ${takes.length} ready` : "";
   if (!busy.length) { clearInterval(clock); $("go").disabled = false; $("go").textContent = "Animate again"; }
