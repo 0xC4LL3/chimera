@@ -4,7 +4,8 @@
 # motion is carried over as each bone's world-space deformation (posed matrix times inverse rest),
 # which does not depend on bone orientation, onto a fresh import of the user's file with its
 # transforms and bone orientations untouched. Both imports take the glTF node pose as rest, so
-# the deformations mean the same thing on both.
+# the deformations mean the same thing on both. rig.load also turned the creature (rig.npz "pre");
+# the deformations are turned back with it.
 # Writes <clip_name>.glb/.fbx with two actions (<clip_name> with root motion, <clip_name>_inplace)
 # and <clip_name>.bvh with root motion.
 import bpy, sys, os
@@ -22,6 +23,7 @@ rig = np.load(os.path.join(run, "rig.npz"))
 names, parents, rest = rig["names"].tolist(), rig["parents"], rig["rest"]
 local_rest = [rest[i] if p < 0 else np.linalg.inv(rest[p]) @ rest[i] for i, p in enumerate(parents)]
 data = np.load(clean)
+P = Matrix(rig["pre"].tolist()) if "pre" in rig else Matrix.Identity(4)
 
 
 def deformations(basis):
@@ -54,7 +56,7 @@ for name, key in ((clip, "basis"), (clip + "_inplace", "basis_inplace")):
     for f, D in enumerate(deformations(data[key])):
         pose = {}  # armature-space posed matrix per bone of the original rig
         for pb in arm.pose.bones:
-            pose[pb.name] = A.inverted() @ D[pb.name] @ A @ rest_arm[pb.name]
+            pose[pb.name] = A.inverted() @ P.inverted() @ D[pb.name] @ P @ A @ rest_arm[pb.name]
             if pb.parent:
                 p = pb.parent.name
                 basis = (rest_arm[p].inverted() @ rest_arm[pb.name]).inverted() @ pose[p].inverted() @ pose[pb.name]
