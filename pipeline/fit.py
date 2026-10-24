@@ -21,7 +21,12 @@
 #   - symmetry: left/right bone pairs mirror each other a little, mostly for the far-side limbs
 #     the camera barely sees. Pairs are found from the rest pose (a bone whose head and direction
 #     mirror another's across x=0), so any bone names work; assumes a rig symmetric about x=0;
-#   - floor (--grounded): no part of the mesh may sink below the lowest point of the reference.
+#   - floor (--grounded): no part of the mesh may sink below the lowest point of the reference;
+#   - feet (--grounded): a foot near the floor lies flat as in the reference pose and does not
+#     slide, and no sole sinks below its reference height. Feet are the bones with at least half
+#     of their mostly-skinned vertices touching the floor in the reference pose; their sole is
+#     those touching vertices. Flatness and sliding fade in as the sole gets within FOOT_H of its
+#     reference height, so a lifted foot is free and the video decides when it is down.
 # Writes per-frame bone basis matrices (N,B,4,4) in Blender's convention and joint positions.
 import json, sys, os, time
 import cv2, numpy as np, torch
@@ -34,7 +39,9 @@ run, video, out = args[:3]
 tracks_path = args[3] if len(args) > 3 else None
 grounded = "--grounded" in sys.argv
 WIN, ITERS, N_SURF, N_MASK, N_TRACK = 8, 150, 4000, 1500, 1500
-W = dict(cover=1.0, track=0.5, smooth=3.0, bdir=10.0, ref=1.0, attach=1000.0, depth=300.0, sym=3.0, floor=1e4)
+FOOT_H = 0.03  # in units of skeleton size
+W = dict(cover=1.0, track=0.5, smooth=3.0, bdir=10.0, ref=1.0, attach=1000.0, depth=300.0, sym=3.0, floor=1e4,
+         flat=1e4, slide=1e4)
 W.update(json.loads(os.environ.get("FIT_WEIGHTS", "{}")))  # for tuning experiments
 
 rig = Rig(run)
@@ -70,6 +77,31 @@ for r in roots[1:]:
         att_root.append(r), att_bone.append(a)
         att_off.append((torch.linalg.inv(ref_mats[a]) @ ref_mats[r])[:3, 3])
 att_off = torch.stack(att_off) if att_off else None
+
+# Feet: per contact bone, the sole vertices touching the floor in the reference pose.
+mostly = rig.weights > 0.5
+near_floor = rig.ref_verts[:, 2] < floor + FOOT_H * size
+soles = [torch.nonzero(mostly[:, j] & near_floor).flatten() for j in range(B)] if grounded else []
+soles = [v for j, v in enumerate(soles) if len(v) and len(v) >= mostly[:, j].sum() / 2]  # not shins grazing the floor
+print(f"feet: {len(soles)}")
+# All soles in one (feet, longest sole) index array, padded by repeating each sole's first vertex.
+sole_idx = torch.stack([torch.cat([v, v[:1].repeat(max(map(len, soles)) - len(v))]) for v in soles]) if soles else None
+sole_on = torch.stack([torch.arange(sole_idx.shape[1], device=dev) < len(v) for v in soles]).float() if soles else None
+sole_n = sole_on.sum(1) if soles else None
+
+
+def feet(v, prev):
+    # Flat and planted feet for frames v (K,V,3); prev: sole positions on the frame before (F,S,3).
+    p = v[:, sole_idx]  # K,F,S,3
+    lift = (p[..., 2] - ref_v[sole_idx, 2]) / size  # sole height change since the reference pose
+    mean = (lift * sole_on).sum(-1) / sole_n
+    g = (1 - torch.where(sole_on > 0, lift, torch.inf).detach().min(-1).values / FOOT_H).clamp(0, 1)  # 1 down, 0 lifted
+    tilt = ((lift - mean[..., None]).pow(2) * sole_on).sum(-1) / sole_n  # the sole tips away from its reference attitude
+    flat = (g * tilt).sum() + torch.relu(-mean).pow(2).sum()  # and never sinks below its reference height
+    p_all, g_all = torch.cat([prev[None], p]), torch.cat([g[:1], g])
+    step = (((p_all[1:, ..., :2] - p_all[:-1, ..., :2]) / size).pow(2).sum(-1) * sole_on).sum(-1) / sole_n
+    return flat, (g_all[1:] * g_all[:-1] * step).sum()
+
 
 # Symmetry pairs, each compared in the rest frame of the pair's nearest common ancestor.
 heads, dirs = rest[:, :3, 3], rest[:, :3, 1]
@@ -159,6 +191,7 @@ H, Wd = frames[0].shape[:2]
 huber = torch.nn.functional.huber_loss
 rot = torch.zeros(B, 3, device=dev)
 trans = torch.zeros(len(roots), 3, device=dev)
+prev_soles = ref_v[sole_idx] if soles else None
 result, joints, t0 = [], [], time.time()
 for w0 in range(0, len(frames), WIN):
     ids = list(range(w0, min(w0 + WIN, len(frames))))
@@ -195,6 +228,9 @@ for w0 in range(0, len(frames), WIN):
             loss = loss + W["attach"] * ((pos - mats[:, att_root, :3, 3]) / size).pow(2).sum()
         if grounded:
             loss = loss + W["floor"] * (torch.relu(floor - s3[..., 2]) / size).pow(2).mean(1).sum()
+        if soles:
+            flat, slide = feet(v, prev_soles)
+            loss = loss + W["flat"] * flat + W["slide"] * slide
         if tracks_path:
             d = project(at(v, tfidx, tbary)) - txy
             per = (huber(d, torch.zeros_like(d), delta=3.0, reduction="none") * tvis).sum((1, 2))
@@ -206,6 +242,7 @@ for w0 in range(0, len(frames), WIN):
     result += list(basis_of(rot, trans).cpu().numpy())
     joints += list(mats[..., :3, 3].detach().cpu().numpy())
     rot, trans = rot[-1], trans[-1]
+    prev_soles = v[-1, sole_idx].detach() if soles else None
     print(f"frames {ids[0]}-{ids[-1]}: loss {loss.item() / K:.2f} per frame ({time.time() - t0:.0f}s)", flush=True)
 
 np.savez(out, basis=np.array(result), joints=np.array(joints), names=names)
