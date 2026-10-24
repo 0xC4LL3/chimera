@@ -40,7 +40,7 @@ bpy.ops.import_scene.gltf(filepath=glb, guess_original_bind_pose=False)
 scene = bpy.context.scene
 scene.render.fps = FPS
 arm = next(o for o in scene.objects if o.type == "ARMATURE")
-for t in list(arm.animation_data.nla_tracks):
+for t in list(arm.animation_data_create().nla_tracks):
     arm.animation_data.nla_tracks.remove(t)
 for a in list(bpy.data.actions):
     bpy.data.actions.remove(a)
