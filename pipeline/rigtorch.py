@@ -38,8 +38,10 @@ class Rig:
                         torch.tensor([self.parents[i] for i in range(self.B) if depth[i] == d], device=dev))
                        for d in range(1, max(depth) + 1)]
         self.cam = cam
-        self.w2c = torch.linalg.inv(T(cam["cam_to_world"]))
-        self.K = T(cam["K"])
+        # One view, or several side by side in the frame (render_ref.py --split): camera, intrinsics, x range.
+        views = cam.get("views", [{"K": cam["K"], "cam_to_world": cam["cam_to_world"], "box": [0, cam["width"]]}])
+        self.views = [(torch.linalg.inv(T(v["cam_to_world"])), T(v["K"]), v["box"]) for v in views]
+        self.w2c, self.K = self.views[0][:2]
 
     def fk(self, basis):
         # World matrix of every bone from basis matrices, for one frame (B,4,4) or many (N,B,4,4).
@@ -61,8 +63,8 @@ class Rig:
         v1 = torch.cat([self.verts, torch.ones_like(self.verts[:, :1])], 1)
         return torch.einsum("vb,...bij,vj->...vi", self.weights, deform[..., :3, :], v1), mats
 
-    def project(self, p):
-        # Pixel positions of points (..., 3); the Blender camera looks down -Z.
-        c = p @ self.w2c[:3, :3].T + self.w2c[:3, 3]
-        K = self.K
+    def project(self, p, view=0):
+        # Pixel positions of points (..., 3) in one view; the Blender camera looks down -Z.
+        w2c, K, _ = self.views[view]
+        c = p @ w2c[:3, :3].T + w2c[:3, 3]
         return torch.stack([K[0, 0] * c[..., 0] / -c[..., 2] + K[0, 2], K[1, 2] - K[1, 1] * c[..., 1] / -c[..., 2]], -1)

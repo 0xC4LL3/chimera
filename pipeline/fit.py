@@ -30,6 +30,8 @@
 #     of their mostly-skinned vertices touching the floor in the reference pose; their sole is
 #     those touching vertices. Flatness and sliding fade in as the sole gets within FOOT_H of its
 #     reference height, so a lifted foot is free and the video decides when it is down.
+# With several views (a split-screen clip, render_ref.py --split) the data terms run in every view,
+# and the depth, bone-direction and strong symmetry priors are dropped: the views see depth.
 # Writes per-frame bone basis matrices (N,B,4,4) in Blender's convention and joint positions.
 import json, sys, os, time
 import cv2, numpy as np, torch
@@ -45,9 +47,11 @@ WIN, ITERS, N_SURF, N_MASK, N_TRACK = 8, 150, 4000, 1500, 1500
 FOOT_H = 0.03  # in units of skeleton size
 W = dict(cover=1.0, track=0.5, smooth=3.0, bdir=10.0, ref=1.0, attach=1000.0, depth=300.0, sym=30.0, floor=1e4,
          flat=1e4, slide=1e4)
-W.update(json.loads(os.environ.get("FIT_WEIGHTS", "{}")))  # for tuning experiments
 
 rig = Rig(run)
+if len(rig.views) > 1:
+    W.update(depth=0.0, bdir=0.0, sym=3.0)
+W.update(json.loads(os.environ.get("FIT_WEIGHTS", "{}")))  # for tuning experiments
 parents, names, B = rig.parents, rig.names, rig.B
 rest, ref_basis, verts, faces, w2c = rig.rest, rig.ref_basis, rig.verts, rig.faces, rig.w2c
 skin, project = rig.skin, rig.project
@@ -171,20 +175,22 @@ def mask_of(f):
     return cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
 
 
+ties = []  # per view: surface points (face, barycentric) and their tracks
 if tracks_path:
-    # Tie each tracked frame-0 pixel to the front-most surface point under it in the reference pose.
+    # Tie each tracked frame-0 pixel to the front-most surface point under it in the reference pose,
+    # seen from the view the pixel lies in.
     tr = np.load(tracks_path)
     pick = np.random.default_rng(0).choice(len(tr["query"]), min(N_TRACK, len(tr["query"])), replace=False)
     query, track_xy, track_vis = T(tr["query"][pick]), T(tr["tracks"][:, pick]), torch.tensor(tr["visible"][:, pick], device=dev)
     dfi, dbary = surface_samples(60000, 1)
     dense = at(ref_v, dfi, dbary)
-    dproj, ddepth = project(dense), (w2c[2, :3] @ dense.T + w2c[2, 3]).neg()
-    near = torch.cdist(query, dproj) < 1.5  # dense points under each query pixel
-    best = torch.where(near, ddepth[None], torch.inf).argmin(1)
-    keep = near.any(1)
-    tfidx, tbary = dfi[best[keep]], dbary[best[keep]]
-    track_xy, track_vis = track_xy[:, keep], track_vis[:, keep]
-    print(f"tracks tied to the surface: {int(keep.sum())} of {len(pick)}")
+    for vi, (vw2c, _, (x0, x1)) in enumerate(rig.views):
+        dproj, ddepth = project(dense, vi), (vw2c[2, :3] @ dense.T + vw2c[2, 3]).neg()
+        near = torch.cdist(query, dproj) < 1.5  # dense points under each query pixel
+        best = torch.where(near, ddepth[None], torch.inf).argmin(1)
+        keep = near.any(1) & (query[:, 0] >= x0) & (query[:, 0] < x1)
+        ties.append((vi, dfi[best[keep]], dbary[best[keep]], track_xy[:, keep], track_vis[:, keep]))
+        print(f"view {vi}: tracks tied to the surface: {int(keep.sum())} of {len(pick)}")
 
 cap = cv2.VideoCapture(video)
 frames = []
@@ -203,27 +209,30 @@ result, joints, t0 = [], [], time.time()
 for w0 in range(0, len(frames), WIN):
     ids = list(range(w0, min(w0 + WIN, len(frames))))
     K = len(ids)
-    dts, mpix = [], []
-    for i in ids:
-        m = mask_of(frames[i])
-        dts.append(torch.tensor(cv2.distanceTransform(1 - m, cv2.DIST_L2, 5), device=dev)[None])
-        ys, xs = np.nonzero(m)
-        sel = np.random.default_rng(i).choice(len(xs), N_MASK, replace=len(xs) < N_MASK)
-        mpix.append(T(np.stack([xs[sel], ys[sel]], 1)))
-    dts, mpix = torch.stack(dts), torch.stack(mpix)
+    sil = []  # per view: distance to the mask and mask pixels, for every frame of the window
+    for x0, x1 in [v[2] for v in rig.views]:
+        dts, mpix = [], []
+        for i in ids:
+            m = mask_of(frames[i])
+            m[:, :x0], m[:, x1:] = 0, 0
+            dts.append(torch.tensor(cv2.distanceTransform(1 - m, cv2.DIST_L2, 5), device=dev)[None])
+            ys, xs = np.nonzero(m)
+            sel = np.random.default_rng(i).choice(len(xs), N_MASK, replace=len(xs) < N_MASK)
+            mpix.append(T(np.stack([xs[sel], ys[sel]], 1)))
+        sil.append((torch.stack(dts), torch.stack(mpix)))
     prev_rot, prev_trans = rot, trans
     rot = prev_rot.expand(K, B, 3).clone().requires_grad_(True)  # each window starts at the last solved frame
     trans = prev_trans.expand(K, len(roots), 3).clone().requires_grad_(True)
-    if tracks_path:
-        txy, tvis = track_xy[ids], track_vis[ids].float()[..., None]
     opt = torch.optim.Adam([rot, trans], lr=0.01)
     for it in range(ITERS):
         v, mats = skin(basis_of(rot, trans))
         s3 = at(v, fidx, bary)
-        s = project(s3)
-        grid = torch.stack([s[..., 0] / (Wd - 1), s[..., 1] / (H - 1)], -1) * 2 - 1
-        loss = torch.nn.functional.grid_sample(dts, grid[:, None], align_corners=True).mean((1, 2, 3)).sum()
-        loss = loss + W["cover"] * torch.cdist(mpix, s).min(2).values.mean(1).sum()
+        loss = 0
+        for vi, (dts, mpix) in enumerate(sil):
+            s = project(s3, vi)
+            grid = torch.stack([s[..., 0] / (Wd - 1), s[..., 1] / (H - 1)], -1) * 2 - 1
+            loss = loss + torch.nn.functional.grid_sample(dts, grid[:, None], align_corners=True).mean((1, 2, 3)).sum()
+            loss = loss + W["cover"] * torch.cdist(mpix, s).min(2).values.mean(1).sum()
         all_rot, all_trans = torch.cat([prev_rot[None], rot]), torch.cat([prev_trans[None], trans])
         loss = loss + W["smooth"] * ((all_rot[1:] - all_rot[:-1]).pow(2).sum() + (all_trans[1:] - all_trans[:-1]).pow(2).sum())
         loss = loss + W["depth"] * (((mats[..., :3, 3] - ref_joints) @ axis) / size).pow(2).mean(1).sum()
@@ -238,8 +247,9 @@ for w0 in range(0, len(frames), WIN):
         if soles:
             flat, slide = feet(v, prev_soles)
             loss = loss + W["flat"] * flat + W["slide"] * slide
-        if tracks_path:
-            d = project(at(v, tfidx, tbary)) - txy
+        for vi, tfidx, tbary, track_xy, track_vis in ties:
+            txy, tvis = track_xy[ids], track_vis[ids].float()[..., None]
+            d = project(at(v, tfidx, tbary), vi) - txy
             per = (huber(d, torch.zeros_like(d), delta=3.0, reduction="none") * tvis).sum((1, 2))
             loss = loss + W["track"] * (per / tvis.sum((1, 2)).clamp(min=1)).sum()
         opt.zero_grad()
