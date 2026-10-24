@@ -18,8 +18,9 @@
 #   - attachment: extra root bones that carry mesh (IK foot controls) stay at their reference
 #     offset from the bone they share most mesh with, so a paw cannot leave its leg;
 #   - depth: joints moving along the camera axis, which neither data term can see, cost a little;
-#   - symmetry: left/right bone pairs (by .L/.R names) mirror each other a little, mostly for
-#     the far-side limbs the camera barely sees; assumes the rig is symmetric about x=0 at rest;
+#   - symmetry: left/right bone pairs mirror each other a little, mostly for the far-side limbs
+#     the camera barely sees. Pairs are found from the rest pose (a bone whose head and direction
+#     mirror another's across x=0), so any bone names work; assumes a rig symmetric about x=0;
 #   - floor (--grounded): no part of the mesh may sink below the lowest point of the reference.
 # Writes per-frame bone basis matrices (N,B,4,4) in Blender's convention and joint positions.
 import json, sys, os, time
@@ -71,10 +72,14 @@ for r in roots[1:]:
 att_off = torch.stack(att_off) if att_off else None
 
 # Symmetry pairs, each compared in the rest frame of the pair's nearest common ancestor.
+heads, dirs = rest[:, :3, 3], rest[:, :3, 1]
+flip = T([-1.0, 1.0, 1.0])
+mismatch = torch.cdist(heads * flip, heads) / size + 1 - (dirs * flip) @ dirs.T
+mismatch.fill_diagonal_(torch.inf)
 sym_l, sym_r, sym_a = [], [], []
-for i, n in enumerate(names):
-    if n.endswith(".L") and n[:-2] + ".R" in names:
-        j = names.index(n[:-2] + ".R")
+for i in range(B):
+    j = int(mismatch[i].argmin())
+    if heads[i, 0] > 0.01 * size and mismatch[i, j] < 0.03:  # i on the +x side, j its mirror image
         anc = next((a for a in chain(i) if a in chain(j)), None)
         if anc is not None:  # pairs in separate hierarchies are IK controls; attachment covers them
             sym_l.append(i), sym_r.append(j), sym_a.append(anc)
