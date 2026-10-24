@@ -55,12 +55,14 @@ class Rig:
         return torch.einsum("vb,...bij,vj->...vi", self.weights[idx], (mats @ self.inv_rest)[..., :3, :], v1)
 
     def skin(self, basis):
+        # Skinned vertices and bone matrices, for one frame of basis matrices or many.
         mats = self.fk(basis)
         deform = mats @ self.inv_rest
         v1 = torch.cat([self.verts, torch.ones_like(self.verts[:, :1])], 1)
-        return torch.einsum("vb,bij,vj->vi", self.weights, deform[:, :3], v1), mats
+        return torch.einsum("vb,...bij,vj->...vi", self.weights, deform[..., :3, :], v1), mats
 
     def project(self, p):
-        c = (self.w2c[:3, :3] @ p.T + self.w2c[:3, 3:]).T  # Blender camera looks down -Z
+        # Pixel positions of points (..., 3); the Blender camera looks down -Z.
+        c = p @ self.w2c[:3, :3].T + self.w2c[:3, 3]
         K = self.K
-        return torch.stack([K[0, 0] * c[:, 0] / -c[:, 2] + K[0, 2], K[1, 2] - K[1, 1] * c[:, 1] / -c[:, 2]], 1)
+        return torch.stack([K[0, 0] * c[..., 0] / -c[..., 2] + K[0, 2], K[1, 2] - K[1, 1] * c[..., 1] / -c[..., 2]], -1)
