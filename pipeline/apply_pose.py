@@ -30,4 +30,6 @@ cam.matrix_world = Matrix(cam_info["cam_to_world"])
 cam.matrix_world = Matrix.Translation(center) @ Matrix.Rotation(math.radians(60), 4, "Z") @ Matrix.Translation(-center) @ cam.matrix_world
 bpy.context.scene.render.filepath = os.path.join(out + "_turned", "")
 bpy.context.scene.render.resolution_percentage = 50  # only for looking at
+if cam_info.get("views"):  # frame it like the first view's panel
+    bpy.context.scene.render.resolution_x = cam_info["views"][0]["box"][1] - cam_info["views"][0]["box"][0]
 bpy.ops.render.render(animation=True)
