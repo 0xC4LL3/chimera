@@ -43,11 +43,12 @@
   <section id="s1">
     <h2><span>1</span>Creature</h2>
     <div class="row">
-      <div><label>Rigged model (.glb)</label><input type="file" id="model" accept=".glb,.gltf"></div>
+      <div><label>Model (.glb)</label><input type="file" id="model" accept=".glb,.gltf"></div>
       <div><label>Starting pose: animation name (empty for rest pose)</label><input type="text" id="action" placeholder="e.g. DragonArmature|Dragon_Flying"></div>
       <div style="flex: 0 1 120px"><label>Frame</label><input type="number" id="frame" value="0" min="0"></div>
     </div>
     <label class="check"><input type="checkbox" id="grounded" checked>Stands on the ground (untick for flying or swimming creatures)</label>
+    <label class="check"><input type="checkbox" id="autorig">My model has no rig (build one automatically; may need a retry or manual fixes)</label>
     <model-viewer id="preview" camera-controls hidden></model-viewer>
   </section>
 
@@ -117,7 +118,7 @@ $("generate").onclick = async () => {
   $("candidates").innerHTML = "";
   picked = null;
   $("s3").classList.add("off");
-  const pose = { action: $("action").value, frame: $("frame").value, grounded: $("grounded").checked };
+  const pose = { action: $("action").value, frame: $("frame").value, grounded: $("grounded").checked, auto_rig: $("autorig").checked };
   try {
     const { jobs } = await post("/api/generate", { creature, prompt: $("prompt").value, count: $("count").value, ...pose });
     $("genStatus").textContent = "Rendering the creature and generating video...";
@@ -145,7 +146,7 @@ $("capture").onclick = async () => {
   try {
     const { job } = await post("/api/capture", {
       creature, clip: picked, action: $("action").value, frame: $("frame").value, grounded: $("grounded").checked,
-      name: $("name").value, loop: $("loop").checked });
+      auto_rig: $("autorig").checked, name: $("name").value, loop: $("loop").checked });
     const files = await waitJob(job, s => $("capStatus").textContent = `Tracking, fitting the skeleton and cleaning up... ${s}s`);
     $("capStatus").textContent = "Done.";
     const name = $("name").value;
