@@ -5,6 +5,8 @@
 # (an action the rig cannot make, the camera seeing it end-on, a broken generation). Also reports
 # how far any bone turned towards or away from the camera: the fitter keeps that small, so a large
 # turn means a limb was swung towards the lens to fake the 2D shape, which the camera cannot see.
+# With several views (split screen) a frame's overlap is the mean over its views, and the turn is
+# not checked: the other view sees it.
 # Prints a JSON report.
 import json, sys, os
 import cv2, numpy as np, torch
@@ -24,19 +26,24 @@ cap = cv2.VideoCapture(video)
 ious = []
 with torch.no_grad():
     verts, mats = rig.skin(basis)
-    pix = rig.project(verts).cpu().numpy()
+    pix = [rig.project(verts, vi).cpu().numpy() for vi in range(len(rig.views))]
     for t in range(len(basis)):
         ok, f = cap.read()
         if not ok:
             break
         bg = np.median(np.concatenate([f[:20].reshape(-1, 3), f[-20:].reshape(-1, 3)]), 0)
         video_mask = cv2.morphologyEx((np.abs(f.astype(int) - bg).sum(2) > 60).astype(np.uint8), cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
-        fit_mask = np.zeros_like(video_mask)
-        for tri in np.round(pix[t][faces]).astype(np.int32):  # one by one: overlapping triangles in one fillPoly cancel out
-            cv2.fillConvexPoly(fit_mask, tri, 1)
-        ious.append((video_mask & fit_mask).sum() / max((video_mask | fit_mask).sum(), 1))
+        view_ious = []
+        for vi, (_, _, (x0, x1)) in enumerate(rig.views):
+            fit_mask = np.zeros_like(video_mask)
+            for tri in np.round(pix[vi][t][faces]).astype(np.int32):  # one by one: overlapping triangles in one fillPoly cancel out
+                cv2.fillConvexPoly(fit_mask, tri, 1)
+            vm, fm = video_mask[:, x0:x1], fit_mask[:, x0:x1]
+            view_ious.append((vm & fm).sum() / max((vm | fm).sum(), 1))
+        ious.append(np.mean(view_ious))
     deforming = (rig.weights.sum(0) > 0) & torch.tensor([p >= 0 for p in rig.parents], device=rig.rest.device)
     turn = ((mats[:, deforming, :3, 1] - rig.fk(rig.ref_basis)[deforming, :3, 1]) @ axis).abs().max().clamp(max=1)
+    turn = turn * (len(rig.views) == 1)
 
 ious = np.array(ious)
 turn_deg = float(np.degrees(np.arcsin(turn.item())))
