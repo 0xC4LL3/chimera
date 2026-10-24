@@ -9,9 +9,12 @@
 #   - point tracks (from track.py): each tracked frame-0 pixel is tied to the visible surface
 #     point under it in the known reference pose, and pulled along its track while visible.
 # One camera leaves many poses that match the video equally well, so priors pick a plausible one:
-#   - pose prior: poses stay close to combinations of the rig's own clip poses (the main
-#     directions of a PCA over every clip frame), so limbs only move the ways its animator
-#     moved them (a wolf's legs never splay sideways, a dragon's wings may swing towards the lens);
+#   - bone direction: bones that carry mesh keep pointing as much towards or away from the camera
+#     as in the reference pose. The camera is chosen perpendicular to the action, so most real
+#     motion stays across the view, while a fit that cannot match the 2D shape otherwise would
+#     turn a limb towards the lens to shorten its projection (a leg splayed sideways looks fine
+#     from the side). Needs nothing but the rig, so it works for a brand-new character;
+#   - reference: a weak pull towards the reference pose, for bones nothing else constrains;
 #   - attachment: extra root bones that carry mesh (IK foot controls) stay at their reference
 #     offset from the bone they share most mesh with, so a paw cannot leave its leg;
 #   - depth: joints moving along the camera axis, which neither data term can see, cost a little;
@@ -29,8 +32,8 @@ args = [a for a in sys.argv[1:] if not a.startswith("--")]
 run, video, out = args[:3]
 tracks_path = args[3] if len(args) > 3 else None
 grounded = "--grounded" in sys.argv
-WIN, ITERS, N_SURF, N_MASK, N_TRACK, POSE_VAR = 8, 150, 4000, 1500, 1500, 0.999
-W = dict(cover=1.0, track=0.5, smooth=3.0, pose=300.0, attach=1000.0, depth=300.0, sym=3.0, floor=1e4)
+WIN, ITERS, N_SURF, N_MASK, N_TRACK = 8, 150, 4000, 1500, 1500
+W = dict(cover=1.0, track=0.5, smooth=3.0, bdir=10.0, ref=1.0, attach=1000.0, depth=300.0, sym=3.0, floor=1e4)
 W.update(json.loads(os.environ.get("FIT_WEIGHTS", "{}")))  # for tuning experiments
 
 rig = Rig(run)
@@ -50,17 +53,9 @@ err = (ref_v - rig.ref_verts).norm(dim=1).max().item()
 print(f"skinning check: max vertex error {err:.5f}")
 assert err < 1e-3
 
-# Pose prior: the main directions of the rig's clip poses (rotation vectors relative to the
-# reference pose, main root excluded since the body may turn freely).
-clip_poses = T(np.load(os.path.join(run, "rig.npz"))["clip_poses"])
-pose_prior = len(clip_poses) > 1
-if pose_prior:
-    X = clip_poses[:, 1:].reshape(len(clip_poses), -1)
-    pose_mean = X.mean(0)
-    _, sv, Vt = torch.linalg.svd(X - pose_mean, full_matrices=False)
-    k = int(((sv**2).cumsum(0) / (sv**2).sum() < POSE_VAR).sum()) + 1
-    pose_dirs = Vt[:k].T
-    print(f"pose prior: {k} directions from {len(clip_poses) - 1} clip frames")
+# Bone direction: how much each mesh-carrying bone (root excluded) points along the camera axis.
+deforming = (rig.weights.sum(0) > 0) & torch.tensor([p >= 0 for p in parents], device=dev)
+ref_dir_depth = ref_mats[deforming, :3, 1] @ axis  # a Blender bone points along its local Y
 
 # Attachments: extra roots that carry mesh, glued to the bone they share most mesh with.
 att_root, att_bone, att_off = [], [], []
@@ -188,9 +183,8 @@ for w0 in range(0, len(frames), WIN):
         loss = loss + W["smooth"] * ((all_rot[1:] - all_rot[:-1]).pow(2).sum() + (all_trans[1:] - all_trans[:-1]).pow(2).sum())
         loss = loss + W["depth"] * (((mats[..., :3, 3] - ref_joints) @ axis) / size).pow(2).mean(1).sum()
         loss = loss + W["sym"] * symmetry(mats)
-        if pose_prior:
-            x = rot[:, 1:].reshape(K, -1) - pose_mean
-            loss = loss + W["pose"] * (x - (x @ pose_dirs) @ pose_dirs.T).pow(2).sum()
+        loss = loss + W["bdir"] * ((mats[..., deforming, :3, 1] @ axis) - ref_dir_depth).pow(2).sum()
+        loss = loss + W["ref"] * rot[:, 1:].pow(2).sum()
         if att_off is not None:
             pos = (mats[:, att_bone, :3, :3] @ att_off[..., None])[..., 0] + mats[:, att_bone, :3, 3]
             loss = loss + W["attach"] * ((pos - mats[:, att_root, :3, 3]) / size).pow(2).sum()
