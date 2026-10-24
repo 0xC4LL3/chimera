@@ -28,7 +28,7 @@ ap.add_argument("--loop", action="store_true")
 ap.add_argument("--contacts", default="")
 args = ap.parse_args()
 
-ITERS = 500
+ITERS = 200
 W_FIT, W_ACC, W_LOOP, W_LOCK, W_GROUND = 1.0, 0.5, 100.0, 1000.0, 1000.0
 H_THR, V_THR, MEDIAN = 0.03, 0.01, 5  # height and per-frame speed, in units of skeleton size
 
@@ -103,7 +103,7 @@ def stats(mats):
 
 
 print("before:", stats(mats0))
-opt = torch.optim.Adam([rot, trans], lr=0.005)
+opt = torch.optim.Adam([rot, trans], lr=0.0125)
 for it in range(ITERS):
     mats = rig.fk(basis_of(rot, trans))
     p, Rm = mats[..., :3, 3] / size, mats[..., :3, :3]
