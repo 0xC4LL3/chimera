@@ -18,7 +18,7 @@
 #   - attachment: extra root bones that carry mesh (IK foot controls) stay at their reference
 #     offset from the bone they share most mesh with, so a paw cannot leave its leg;
 #   - depth: joints moving along the camera axis, which neither data term can see, cost a little;
-#   - symmetry: left/right bone pairs mirror each other a little, mostly for the far-side limbs
+#   - symmetry: left/right bone pairs mirror each other, mostly for the far-side limbs
 #     the camera barely sees. Pairs are found from the rest pose (a bone whose head and direction
 #     mirror another's across x=0), so any bone names work; assumes a rig symmetric about x=0.
 #     Bones on the centre line (spine, neck, tail) are their own mirror image, so relative to their
@@ -43,7 +43,7 @@ tracks_path = args[3] if len(args) > 3 else None
 grounded = "--grounded" in sys.argv
 WIN, ITERS, N_SURF, N_MASK, N_TRACK = 8, 150, 4000, 1500, 1500
 FOOT_H = 0.03  # in units of skeleton size
-W = dict(cover=1.0, track=0.5, smooth=3.0, bdir=10.0, ref=1.0, attach=1000.0, depth=300.0, sym=3.0, floor=1e4,
+W = dict(cover=1.0, track=0.5, smooth=3.0, bdir=10.0, ref=1.0, attach=1000.0, depth=300.0, sym=30.0, floor=1e4,
          flat=1e4, slide=1e4)
 W.update(json.loads(os.environ.get("FIT_WEIGHTS", "{}")))  # for tuning experiments
 
