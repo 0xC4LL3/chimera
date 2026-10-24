@@ -6,7 +6,8 @@
    "start_action": "DragonArmature|Dragon_Flying",
    "start_frame": 0,
    "grounded": false,
-   "auto_rig": false
+   "auto_rig": false,
+   "split_screen": true
   }
  },
  "clip": {

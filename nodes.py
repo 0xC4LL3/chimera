@@ -46,19 +46,20 @@ class LoadCreature(IO.ComfyNode):
                  if p.suffix.lower() in (".glb", ".gltf")]
         return IO.Schema(
             node_id="ChimeraLoadCreature", display_name="Load Creature (Chimera)", category="chimera",
-            description="Render a rigged creature from a side camera as the video's first frame.",
+            description="Render a rigged creature as the video's first frame: side and front views side by side, or the side view alone.",
             inputs=[
                 IO.Combo.Input("model_file", options=sorted(files), upload=IO.UploadType.model),
                 IO.String.Input("start_action", default="", tooltip="Animation whose first frame is the starting pose; empty for the rest pose."),
                 IO.Int.Input("start_frame", default=0, min=0),
                 IO.Boolean.Input("grounded", default=True, tooltip="Creature stands on the ground: the capture keeps it above the floor and locks feet that touch it."),
                 IO.Boolean.Input("auto_rig", default=False, tooltip="The model has no rig: build a skeleton and skin weights for it with SkinTokens first."),
+                IO.Boolean.Input("split_screen", default=True, tooltip="Show the side and front views side by side, so the clip shows the motion from two angles. Say so in the prompt."),
             ],
             outputs=[Run.Output(display_name="run"), IO.Image.Output(display_name="reference")],
         )
 
     @classmethod
-    def execute(cls, model_file, start_action, start_frame, grounded, auto_rig=False):
+    def execute(cls, model_file, start_action, start_frame, grounded, auto_rig=False, split_screen=True):
         glb = folder_paths.get_annotated_filepath(model_file)
         run = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(glb).stem}_{time.strftime('%Y%m%d_%H%M%S')}")
         os.makedirs(run)
@@ -66,7 +67,7 @@ class LoadCreature(IO.ComfyNode):
             python("autorig.py", glb, os.path.join(run, "rigged.glb"), vram_gb=12)
             glb = os.path.join(run, "rigged.glb")
         json.dump({"glb": glb, "grounded": grounded}, open(os.path.join(run, "run.json"), "w"))
-        blender("render_ref.py", glb, run, *([start_action, str(start_frame)] if start_action else []))
+        blender("render_ref.py", glb, run, *([start_action, str(start_frame)] if start_action else []), *(["--split"] if split_screen else []))
         blender("dump_rig.py", glb, run)
         ref = np.asarray(Image.open(os.path.join(run, "ref.png")).convert("RGB"), dtype=np.float32) / 255
         return IO.NodeOutput(run, torch.from_numpy(ref)[None])
