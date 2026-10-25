@@ -131,7 +131,8 @@ class CleanupMotion(IO.ComfyNode):
                     "Try another clip.")
         open(os.path.join(run, "check.txt"), "w").write(text)  # as a file too: API clients only receive files
         sub = os.path.relpath(run, folder_paths.get_output_directory())
-        return IO.NodeOutput(run, text, ui={"text": [text], "files": [{"filename": "check.txt", "subfolder": sub, "type": "output"}]})
+        files = [{"filename": f, "subfolder": sub, "type": "output"} for f in ("check.txt", "check.json", "facing.json")]  # facing: for showing the creature's front
+        return IO.NodeOutput(run, text, ui={"text": [text], "files": files})
 
 
 class ExportAnimation(IO.ComfyNode):
