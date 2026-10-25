@@ -45,7 +45,7 @@ tracks_path = args[3] if len(args) > 3 else None
 grounded = "--grounded" in sys.argv
 WIN, ITERS, N_SURF, N_MASK, N_TRACK = 8, 150, 4000, 1500, 1500
 FOOT_H = 0.03  # in units of skeleton size
-W = dict(cover=1.0, track=0.5, smooth=3.0, bdir=10.0, ref=1.0, attach=1000.0, depth=300.0, sym=30.0, floor=1e4,
+W = dict(cover=3.0, track=0.5, smooth=3.0, bdir=10.0, ref=1.0, attach=1000.0, depth=300.0, sym=30.0, floor=1e4,
          flat=1e4, slide=1e4)
 
 rig = Rig(run)
