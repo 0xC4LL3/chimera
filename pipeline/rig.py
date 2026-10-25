@@ -85,6 +85,9 @@ def load(glb, run=None):
         if p:
             o.vertex_groups.new(name=p.parent_bone).add(range(len(o.data.vertices)), 1.0, "REPLACE")
             o.modifiers.new("Armature", "ARMATURE").object = arm
+    for o in list(bpy.data.objects):  # meshes the skeleton does not move are not part of the creature (stray triangles, ground)
+        if o.type == "MESH" and not (any(m.type == "ARMATURE" for m in o.modifiers) and any(v.groups for v in o.data.vertices)):
+            bpy.data.objects.remove(o)
     bake(arm, pre)
     for o in list(bpy.data.objects):
         if o.type == "EMPTY":
