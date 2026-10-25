@@ -155,6 +155,7 @@ def render_from_camera(cam_info, out, n_frames, transparent=True):
     scene = bpy.context.scene
     cam_data = bpy.data.cameras.new("Cam")
     cam_data.lens, cam_data.sensor_width, cam_data.sensor_fit = cam_info["lens"], cam_info["sensor_width"], "HORIZONTAL"
+    cam_data.clip_start, cam_data.clip_end = cam_info.get("clip", (0.1, 100))
     cam = bpy.data.objects.new("Cam", cam_data)
     cam.matrix_world = Matrix(cam_info["cam_to_world"])
     scene.collection.objects.link(cam)

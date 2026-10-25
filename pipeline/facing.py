@@ -61,6 +61,7 @@ sun.rotation_euler = (0.7, 0.35, 1.05)
 scene.collection.objects.link(sun)
 cam = bpy.data.objects.new("Cam", bpy.data.cameras.new("Cam"))
 cam.data.type, cam.data.ortho_scale = "ORTHO", 1.1 * size
+cam.data.clip_start, cam.data.clip_end = 0.01 * size, 10 * size
 scene.collection.objects.link(cam)
 scene.camera = cam
 scene.render.engine = "CYCLES"

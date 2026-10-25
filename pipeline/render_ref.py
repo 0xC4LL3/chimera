@@ -44,6 +44,7 @@ center, size = (lo + hi) / 2, (hi - lo)
 PW = W // 2 if split else W  # panel width
 cam_data = bpy.data.cameras.new("Cam")
 cam_data.lens, cam_data.sensor_width, cam_data.sensor_fit = 50, 36, "HORIZONTAL"
+cam_data.clip_start, cam_data.clip_end = 0.01 * max(size), 100 * max(size)  # any model scale
 cam = bpy.data.objects.new("Cam", cam_data)
 scene.collection.objects.link(cam)
 scene.camera = cam
@@ -104,7 +105,7 @@ for p in panels:
 json.dump({
     "width": W, "height": H,
     "K": cams[0]["K"], "cam_to_world": cams[0]["cam_to_world"],
-    "lens": cam_data.lens, "sensor_width": cam_data.sensor_width,
+    "lens": cam_data.lens, "sensor_width": cam_data.sensor_width, "clip": [cam_data.clip_start, cam_data.clip_end],
     "action": action, "frame": frame, "background": list(bg),
     "joints2d": joints,
     **({"views": cams} if split else {}),
