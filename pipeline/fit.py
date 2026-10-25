@@ -209,17 +209,20 @@ result, joints, t0 = [], [], time.time()
 for w0 in range(0, len(frames), WIN):
     ids = list(range(w0, min(w0 + WIN, len(frames))))
     K = len(ids)
-    sil = []  # per view: distance to the mask and mask pixels, for every frame of the window
+    sil = []  # per view: distance to the mask, mask pixels and whether the creature is in view, for every frame of the window
     for x0, x1 in [v[2] for v in rig.views]:
-        dts, mpix = [], []
+        dts, mpix, seen = [], [], []
         for i in ids:
             m = mask_of(frames[i])
             m[:, :x0], m[:, x1:] = 0, 0
-            dts.append(torch.tensor(cv2.distanceTransform(1 - m, cv2.DIST_L2, 5), device=dev)[None])
             ys, xs = np.nonzero(m)
+            seen.append(len(xs) > 0)  # a creature that left this view says nothing about its shape there
+            if not seen[-1]:
+                m[0, x0], xs, ys = 1, np.array([x0]), np.array([0])
+            dts.append(torch.tensor(cv2.distanceTransform(1 - m, cv2.DIST_L2, 5), device=dev)[None])
             sel = np.random.default_rng(i).choice(len(xs), N_MASK, replace=len(xs) < N_MASK)
             mpix.append(T(np.stack([xs[sel], ys[sel]], 1)))
-        sil.append((torch.stack(dts), torch.stack(mpix)))
+        sil.append((torch.stack(dts), torch.stack(mpix), T(seen)))
     prev_rot, prev_trans = rot, trans
     rot = prev_rot.expand(K, B, 3).clone().requires_grad_(True)  # each window starts at the last solved frame
     trans = prev_trans.expand(K, len(roots), 3).clone().requires_grad_(True)
@@ -228,11 +231,11 @@ for w0 in range(0, len(frames), WIN):
         v, mats = skin(basis_of(rot, trans))
         s3 = at(v, fidx, bary)
         loss = 0
-        for vi, (dts, mpix) in enumerate(sil):
+        for vi, (dts, mpix, seen) in enumerate(sil):
             s = project(s3, vi)
             grid = torch.stack([s[..., 0] / (Wd - 1), s[..., 1] / (H - 1)], -1) * 2 - 1
-            loss = loss + torch.nn.functional.grid_sample(dts, grid[:, None], align_corners=True).mean((1, 2, 3)).sum()
-            loss = loss + W["cover"] * torch.cdist(mpix, s).min(2).values.mean(1).sum()
+            loss = loss + (torch.nn.functional.grid_sample(dts, grid[:, None], align_corners=True).mean((1, 2, 3)) * seen).sum()
+            loss = loss + W["cover"] * (torch.cdist(mpix, s).min(2).values.mean(1) * seen).sum()
         all_rot, all_trans = torch.cat([prev_rot[None], rot]), torch.cat([prev_trans[None], trans])
         loss = loss + W["smooth"] * ((all_rot[1:] - all_rot[:-1]).pow(2).sum() + (all_trans[1:] - all_trans[:-1]).pow(2).sum())
         loss = loss + W["depth"] * (((mats[..., :3, 3] - ref_joints) @ axis) / size).pow(2).mean(1).sum()
