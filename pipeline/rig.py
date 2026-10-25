@@ -89,6 +89,15 @@ def load(glb, run=None):
         if o.type == "MESH" and not (any(m.type == "ARMATURE" for m in o.modifiers) and any(v.groups for v in o.data.vertices)):
             bpy.data.objects.remove(o)
     bake(arm, pre)
+    # Meshes far outside the skeleton are broken leftovers (a bind pose thousands of units away).
+    deps = bpy.context.evaluated_depsgraph_get()
+    joints = np.array([p for b in arm.data.bones for p in (b.head_local, b.tail_local)])
+    lo, hi = joints.min(0), joints.max(0)
+    reach = np.linalg.norm(hi - lo)
+    for o in [o for o in bpy.data.objects if o.type == "MESH"]:
+        v = np.array([v.co for v in o.evaluated_get(deps).to_mesh().vertices])
+        if len(v) and np.linalg.norm(np.maximum(np.maximum(lo - np.median(v, 0), np.median(v, 0) - hi), 0)) > reach:
+            bpy.data.objects.remove(o)
     for o in list(bpy.data.objects):
         if o.type == "EMPTY":
             bpy.data.objects.remove(o)
