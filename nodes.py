@@ -38,17 +38,20 @@ def run_info(run):
     return json.load(open(os.path.join(run, "run.json")))
 
 
+def model_files():
+    base = Path(folder_paths.get_input_directory())  # uploads land in 3d/ (editor) or the root (API)
+    return sorted(str(p.relative_to(base)).replace("\\", "/") for p in base.rglob("*")
+                  if p.suffix.lower() in (".glb", ".gltf", ".fbx"))
+
+
 class LoadCreature(IO.ComfyNode):
     @classmethod
     def define_schema(cls):
-        base = Path(folder_paths.get_input_directory())  # uploads land in 3d/ (editor) or the root (API)
-        files = [str(p.relative_to(base)).replace("\\", "/") for p in base.rglob("*")
-                 if p.suffix.lower() in (".glb", ".gltf")]
         return IO.Schema(
             node_id="ChimeraLoadCreature", display_name="Load Creature (Chimera)", category="chimera",
             description="Render a rigged creature as the video's first frame: two three-quarter views side by side, or the side view alone.",
             inputs=[
-                IO.Combo.Input("model_file", options=sorted(files), upload=IO.UploadType.model),
+                IO.Combo.Input("model_file", options=model_files(), upload=IO.UploadType.model),
                 IO.String.Input("start_action", default="", tooltip="Animation whose first frame is the starting pose; empty for the rest pose."),
                 IO.Int.Input("start_frame", default=0, min=0),
                 IO.Boolean.Input("grounded", default=True, tooltip="Creature stands on the ground: the capture keeps it above the floor and locks feet that touch it."),
@@ -60,22 +63,22 @@ class LoadCreature(IO.ComfyNode):
 
     @classmethod
     def execute(cls, model_file, start_action, start_frame, grounded, auto_rig=False, split_screen=True):
-        glb = folder_paths.get_annotated_filepath(model_file)
-        run = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(glb).stem}_{time.strftime('%Y%m%d_%H%M%S')}")
+        model = folder_paths.get_annotated_filepath(model_file)
+        run = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(model).stem}_{time.strftime('%Y%m%d_%H%M%S')}")
         os.makedirs(run)
         if auto_rig:
             for attempt in range(3):  # SkinTokens now and then decodes a malformed skeleton; a new try decodes afresh
                 try:
-                    python("autorig.py", glb, os.path.join(run, "rigged.glb"), vram_gb=12)
+                    python("autorig.py", model, os.path.join(run, "rigged.glb"), vram_gb=12)
                     break
                 except RuntimeError:
                     if attempt == 2:
                         raise
-            glb = os.path.join(run, "rigged.glb")
-        json.dump({"glb": glb, "grounded": grounded}, open(os.path.join(run, "run.json"), "w"))
-        python("facing.py", glb, run, vram_gb=3)
-        blender("render_ref.py", glb, run, *([start_action, str(start_frame)] if start_action else []), *(["--split"] if split_screen else []))
-        blender("dump_rig.py", glb, run)
+            model = os.path.join(run, "rigged.glb")
+        json.dump({"model": model, "grounded": grounded}, open(os.path.join(run, "run.json"), "w"))
+        python("facing.py", model, run, vram_gb=3)
+        blender("render_ref.py", model, run, *([start_action, str(start_frame)] if start_action else []), *(["--split"] if split_screen else []))
+        blender("dump_rig.py", model, run)
         ref = np.asarray(Image.open(os.path.join(run, "ref.png")).convert("RGB"), dtype=np.float32) / 255
         return IO.NodeOutput(run, torch.from_numpy(ref)[None])
 
@@ -149,7 +152,7 @@ class ExportAnimation(IO.ComfyNode):
     @classmethod
     def execute(cls, run, clip_name):
         out = os.path.join(run, "export")
-        blender("export.py", run_info(run)["glb"], run, os.path.join(run, "clean.npz"), out, clip_name)
+        blender("export.py", run_info(run)["model"], run, os.path.join(run, "clean.npz"), out, clip_name)
         sub = os.path.relpath(out, folder_paths.get_output_directory())
         files = [{"filename": clip_name + ext, "subfolder": sub, "type": "output"} for ext in (".glb", ".fbx", ".bvh")]
         return IO.NodeOutput(Types.File3D(os.path.join(out, clip_name + ".glb")), out, ui={"files": files})
@@ -169,7 +172,7 @@ class Overlay(IO.ComfyNode):
     def execute(cls, run, cleaned):
         pose = os.path.join(run, "clean.npz" if cleaned else "pose.npz")
         frames = os.path.join(run, "overlay_frames")
-        blender("apply_pose.py", run_info(run)["glb"], run, pose, frames)
+        blender("apply_pose.py", run_info(run)["model"], run, pose, frames)
         out = os.path.join(run, "overlay.mp4")
         python("measure.py", os.path.join(run, "clip.mp4"), frames, out, frames + "_turned")
         return IO.NodeOutput(InputImpl.VideoFromFile(out))
