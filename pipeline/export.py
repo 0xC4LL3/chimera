@@ -73,7 +73,7 @@ scene.frame_start, scene.frame_end = 0, len(data["basis"]) - 1
 
 base = os.path.join(out, clip)
 bpy.ops.export_scene.gltf(filepath=base + ".glb", export_format="GLB", export_animation_mode="ACTIONS")
-bpy.ops.export_scene.fbx(filepath=base + ".fbx", add_leaf_bones=False, bake_anim=True,
+bpy.ops.export_scene.fbx(filepath=base + ".fbx", add_leaf_bones=False, bake_anim=True, path_mode="COPY", embed_textures=True,
                          bake_anim_use_all_actions=True, bake_anim_use_nla_strips=False, bake_anim_simplify_factor=0)
 arm.animation_data.action = actions[0]
 bpy.ops.object.select_all(action="DESELECT")
