@@ -1,0 +1,8 @@
+{
+ "preview": {
+  "class_type": "ChimeraPreviewModel",
+  "inputs": {
+   "model_file": "3d/dragon.glb"
+  }
+ }
+}

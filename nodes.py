@@ -44,6 +44,28 @@ def model_files():
                   if p.suffix.lower() in (".glb", ".gltf", ".fbx"))
 
 
+class PreviewModel(IO.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return IO.Schema(
+            node_id="ChimeraPreviewModel", display_name="Preview Model (Chimera)", category="chimera",
+            description="A GLB of any model Chimera reads (GLB, glTF or FBX), and its bone count and animations, for showing it before animating.",
+            inputs=[IO.Combo.Input("model_file", options=model_files(), upload=IO.UploadType.model)],
+            outputs=[IO.File3DGLB.Output(display_name="glb"), IO.String.Output(display_name="info")],
+            is_output_node=True,
+        )
+
+    @classmethod
+    def execute(cls, model_file):
+        model = folder_paths.get_annotated_filepath(model_file)
+        out = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(model).stem}_preview_{time.strftime('%Y%m%d_%H%M%S')}")
+        blender("preview_model.py", model, out)
+        info = open(os.path.join(out, "info.json")).read()
+        sub = os.path.relpath(out, folder_paths.get_output_directory())
+        files = [{"filename": f, "subfolder": sub, "type": "output"} for f in ("preview.glb", "info.json")]  # API clients only receive files
+        return IO.NodeOutput(Types.File3D(os.path.join(out, "preview.glb")), info, ui={"text": [info], "files": files})
+
+
 class LoadCreature(IO.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -180,7 +202,7 @@ class Overlay(IO.ComfyNode):
 
 class ChimeraExtension(ComfyExtension):
     async def get_node_list(self):
-        return [LoadCreature, CaptureMotion, CleanupMotion, ExportAnimation, Overlay]
+        return [PreviewModel, LoadCreature, CaptureMotion, CleanupMotion, ExportAnimation, Overlay]
 
 
 async def comfy_entrypoint():
