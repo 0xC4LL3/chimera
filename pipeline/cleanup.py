@@ -5,7 +5,8 @@
 # against:
 #   - smoothness: low acceleration of the same quantities. With both in the same units the pair
 #     acts as a low-pass filter; W_ACC / W_FIT = 0.5 keeps motion up to about 5 Hz at 24 fps;
-#   - loop closing (--loop): the last frame matches the first, so an attack chains into idle.
+#   - loop closing (--loop): the last frame returns to the fitted first frame, which is the creature's
+#     idle pose and stays put, so an attack chains into idle.
 # Feet are kept flat and planted by the fitter, which weighs them against the video; locking them
 # here, without the video, pulled the body away from the clip.
 # Writes basis (root motion kept) and basis_inplace (horizontal root travel removed).
@@ -71,7 +72,7 @@ for it in range(ITERS):
     loss = loss + W_ACC * ((p[2:] - 2 * p[1:-1] + p[:-2]).pow(2).sum(-1).mean()
                            + (Rm[2:] - 2 * Rm[1:-1] + Rm[:-2]).pow(2).sum((-1, -2)).mean())
     if args.loop:
-        loss = loss + W_LOOP * ((p[-1] - p[0]).pow(2).sum(-1).mean() + (Rm[-1] - Rm[0]).pow(2).sum((-1, -2)).mean())
+        loss = loss + W_LOOP * ((p[-1] - p0[0] / size).pow(2).sum(-1).mean() + (Rm[-1] - R0[0]).pow(2).sum((-1, -2)).mean())
     opt.zero_grad()
     loss.backward()
     opt.step()
