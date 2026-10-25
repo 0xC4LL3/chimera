@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from comfy_sdk import Comfy
+from comfy_sdk.exceptions import JobFailed
 
 HERE = Path(__file__).parent
 WORKFLOWS = HERE.parent / "workflows"
@@ -19,8 +20,11 @@ app = FastAPI()
 jobs = {}  # job id -> Job
 
 
+MODELS = (".glb", ".gltf", ".fbx")
+
+
 def creature_path(creature):
-    files = list((DATA / creature).glob("*.gl*"))
+    files = [p for p in (DATA / creature).glob("*") if p.suffix.lower() in MODELS]
     if not files:
         raise HTTPException(404, "unknown creature")
     return files[0]
@@ -53,14 +57,30 @@ def submit(wf):
 
 
 def model_info(path):
-    # Whether the model has a skeleton, and its animations (possible starting poses), from the glTF JSON.
-    data = path.read_bytes()
-    doc = json.loads(data[20:20 + struct.unpack_from("<I", data, 12)[0]] if data[:4] == b"glTF" else data)
-    return {"bones": sum(len(s["joints"]) for s in doc.get("skins", [])),
-            "animations": [a.get("name", f"Animation {i + 1}") for i, a in enumerate(doc.get("animations", []))]}
+    # Whether the model has a skeleton, its animations (possible starting poses) and a GLB the browser
+    # can show. A glTF says all this in its JSON; any other format is read by ComfyUI (Blender).
+    if path.suffix.lower() != ".fbx":
+        data = path.read_bytes()
+        doc = json.loads(data[20:20 + struct.unpack_from("<I", data, 12)[0]] if data[:4] == b"glTF" else data)
+        return {"bones": sum(len(s["joints"]) for s in doc.get("skins", [])),
+                "animations": [a.get("name", f"Animation {i + 1}") for i, a in enumerate(doc.get("animations", []))],
+                "preview": f"/data/{path.parent.name}/{path.name}"}
+    wf = comfy.workflows.from_file(WORKFLOWS / "preview_api.json")
+    wf.set_input("preview", "model_file", comfy.assets.from_file(path))
+    out = path.parent / "preview"
+    out.mkdir()
+    try:
+        outputs = comfy.run(wf, timeout=600).outputs
+    except JobFailed:
+        raise HTTPException(400, "Can't read this FBX. Try binary FBX 7.1+ or GLB.")
+    for o in outputs:
+        o.to_file(out / o.name)
+    return {**json.loads((out / "info.json").read_text()), "preview": f"/data/{path.parent.name}/preview/preview.glb"}
 
 
 def add_creature(name, src):
+    if Path(name).suffix.lower() not in MODELS:
+        raise HTTPException(400, "Use a .glb or .fbx model")
     creature = uuid.uuid4().hex[:8]
     (DATA / creature).mkdir()
     with open(DATA / creature / Path(name).name, "wb") as f:

@@ -136,9 +136,9 @@
     </div>
     <label class="drop">
       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5 3.5 7v10L12 21.5 20.5 17V7L12 2.5Z"/><path d="M3.5 7 12 11.5 20.5 7M12 11.5v10"/></svg>
-      <strong>Drop a .glb model here</strong>
+      <strong>Drop a .glb or .fbx model here</strong>
       <span>or click to browse · rigged or not</span>
-      <input type="file" id="file" accept=".glb,.gltf" hidden>
+      <input type="file" id="file" accept=".glb,.gltf,.fbx" hidden>
     </label>
     <div class="samples">
       <p>Or start with one of these</p>
@@ -230,10 +230,18 @@ async function useCreature(previewUrl, register) {
   $("start").hidden = true;
   $("studio").hidden = false;
   $("takes").hidden = true;
-  $("preview").src = previewUrl;
+  $("preview").src = previewUrl || "";  // none for FBX: the browser shows the GLB the server makes of it
   $("rigChip").textContent = "Reading model…";
   $("go").disabled = true;
-  info = await register();
+  try {
+    info = await register();
+  } catch (e) {
+    let msg = "Couldn't read this model";
+    try { msg = JSON.parse(e.message).detail || msg; } catch {}
+    $("rigChip").textContent = msg;
+    return;
+  }
+  if (!previewUrl) $("preview").src = info.preview;
   creature = info.creature;
   $("rigChip").textContent = info.bones ? `${info.bones} bones` : "Will be auto-rigged";
   $("poseRow").hidden = !info.animations.length;
@@ -243,7 +251,7 @@ async function useCreature(previewUrl, register) {
 }
 
 function pickFile(file) {
-  if (file) useCreature(URL.createObjectURL(file), () => post("/api/creature", { file }));
+  if (file) useCreature(/\.fbx$/i.test(file.name) ? null : URL.createObjectURL(file), () => post("/api/creature", { file }));
 }
 $("file").onchange = () => pickFile($("file").files[0]);
 document.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("dragging"); });
