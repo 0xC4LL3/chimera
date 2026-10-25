@@ -172,6 +172,8 @@ def render_from_camera(cam_info, out, n_frames, transparent=True):
     cam.matrix_world = Matrix(cam_info["cam_to_world"])
     scene.collection.objects.link(cam)
     scene.camera = cam
+    if not scene.world:  # soft gray ambient, so sides the sun misses are not black
+        backdrop((0.6, 0.6, 0.6))
     if not any(o.type == "LIGHT" for o in scene.objects):
         sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
         sun.data.energy = 3
