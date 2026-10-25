@@ -6,7 +6,8 @@
 # how far any bone turned towards or away from the camera: the fitter keeps that small, so a large
 # turn means a limb was swung towards the lens to fake the 2D shape, which the camera cannot see.
 # With several views (split screen) a frame's overlap is the mean over its views, and the turn is
-# not checked: the other view sees it.
+# not checked: the other view sees it. Also reports how much the creature moves, for ranking takes: a
+# clip where it barely moves matches easily but shows little of the asked action.
 # Prints a JSON report.
 import json, sys, os
 import cv2, numpy as np, torch
@@ -44,9 +45,11 @@ with torch.no_grad():
     deforming = (rig.weights.sum(0) > 0) & torch.tensor([p >= 0 for p in rig.parents], device=rig.rest.device)
     turn = ((mats[:, deforming, :3, 1] - rig.fk(rig.ref_basis)[deforming, :3, 1]) @ axis).abs().max().clamp(max=1)
     turn = turn * (len(rig.views) == 1)
+    size = (verts[0].max(0).values - verts[0].min(0).values).norm()
+    motion = ((verts - verts[:1]).norm(dim=-1).max(0).values.quantile(0.9) / size).item()  # how far the most moving tenth of the surface travels
 
 ious = np.array(ious)
 turn_deg = float(np.degrees(np.arcsin(turn.item())))
 print(json.dumps({"ok": bool(ious.mean() >= MEAN_LIMIT and ious.min() >= MIN_LIMIT and turn_deg <= TURN_LIMIT),
                   "mean_overlap": round(float(ious.mean()), 3), "min_overlap": round(float(ious.min()), 3),
-                  "worst_frame": int(ious.argmin()), "max_turn_deg": round(turn_deg, 1)}))
+                  "worst_frame": int(ious.argmin()), "max_turn_deg": round(turn_deg, 1), "motion": round(motion, 3)}))
