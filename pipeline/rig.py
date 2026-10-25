@@ -65,7 +65,8 @@ def load(path, run=None):
     drop_missing_textures(path)
     scene = bpy.context.scene
     for o in list(bpy.data.objects):
-        if (o.type == "MESH" and o.parent is None) or (o.type == "EMPTY" and o.name.endswith("_end")):
+        if ((o.type == "MESH" and o.parent is None and not any(m.type == "ARMATURE" for m in o.modifiers))
+                or (o.type == "EMPTY" and o.name.endswith("_end"))):
             bpy.data.objects.remove(o)  # stray meshes and glTF leaf markers
     arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
     anim = arm.animation_data_create()  # also for rigs that come without animations
