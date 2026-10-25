@@ -85,8 +85,11 @@ def load(glb, run=None):
         if p:
             o.vertex_groups.new(name=p.parent_bone).add(range(len(o.data.vertices)), 1.0, "REPLACE")
             o.modifiers.new("Armature", "ARMATURE").object = arm
+    names = {b.name for b in arm.data.bones}
     for o in list(bpy.data.objects):  # meshes the skeleton does not move are not part of the creature (stray triangles, ground)
-        if o.type == "MESH" and not (any(m.type == "ARMATURE" for m in o.modifiers) and any(v.groups for v in o.data.vertices)):
+        bone_groups = {g.index for g in o.vertex_groups if g.name in names} if o.type == "MESH" else set()
+        if o.type == "MESH" and not (any(m.type == "ARMATURE" for m in o.modifiers)
+                                     and any(g.group in bone_groups and g.weight > 0 for v in o.data.vertices for g in v.groups)):
             bpy.data.objects.remove(o)
     bake(arm, pre)
     # Meshes far outside the skeleton are broken leftovers (a bind pose thousands of units away).
