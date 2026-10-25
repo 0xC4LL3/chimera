@@ -24,6 +24,7 @@ for o in meshes:
 total = sum(len(o.data.loop_triangles) for o in meshes)
 if total > MAX_TRIS:
     for o in meshes:
+        o.shape_key_clear()  # the capture never moves shape keys, and Decimate refuses meshes that have them
         bm = bmesh.new()  # weld first: some exporters (SkinTokens) leave every triangle's corners separate
         bm.from_mesh(o.data)
         bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6 * max(o.dimensions))
