@@ -88,6 +88,8 @@
   .take.ready { cursor: pointer; } .take.ready:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
   .media { aspect-ratio: 16 / 9; background: var(--sunken); position: relative; overflow: hidden; }
   .media video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .media model-viewer { width: 100%; height: 100%; display: block; pointer-events: none; }
+  .media video.inset { position: absolute; right: 10px; bottom: 10px; width: 34%; height: auto; border-radius: 8px; box-shadow: var(--shadow); }
   .media.busy::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .08) 50%, transparent 70%);
     animation: sheen 1.6s infinite; }
   @keyframes sheen { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
@@ -175,7 +177,7 @@
     </div>
   </section>
 
-  <footer>Sample models by Quaternius (CC0) and Scenario (CC BY 4.0) · Built on ComfyUI and LTX-2</footer>
+  <footer>Sample models by Quaternius (CC0) and Scenario (CC BY 4.0) · Built on ComfyUI and LTX-2.5</footer>
 </main>
 
 <dialog id="detail">
@@ -277,7 +279,7 @@ const fmt = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 function render() {
   const done = takes.filter(t => t.state === "done" || t.state === "error");
-  const good = takes.filter(t => t.state === "done" && t.pass).sort((a, b) => b.overlap - a.overlap);
+  const good = takes.filter(t => t.state === "done" && t.pass).sort((a, b) => b.motion - a.motion);  // all fit; the liveliest shows most of the move
   const busy = takes.filter(t => t.state !== "done" && t.state !== "error");
   const misses = takes.filter(t => (t.state === "done" && !t.pass) || t.state === "error");
   const grid = $("grid");
@@ -310,11 +312,17 @@ async function runTake(t, genId, fields) {
     t.state = "waitcap"; render();
     const { job } = await post("/api/capture", { ...fields, clip: genId, loop: true });
     t.files = await waitJob(job, () => { t.state = "capture"; t.since = Date.now(); render(); });
-    t.report = await (await fetch(t.files.find(f => f.endsWith(".txt")))).text();
-    t.pass = t.report.startsWith("Check passed");
-    t.overlap = parseFloat((t.report.match(/overlap ([\d.]+)/) || [0, 0])[1]);
+    const report = await (await fetch(t.files.find(f => f.endsWith("check.json")))).json();
+    t.pass = report.ok;
+    t.motion = report.motion;
     t.state = "done";
-    t.el.querySelector(".media").classList.remove("busy");
+    const media = t.el.querySelector(".media");
+    media.classList.remove("busy");
+    if (t.pass) {  // the creature itself doing the move, with the filmed take as an inset
+      media.innerHTML = `<model-viewer src="${t.files.find(f => f.endsWith(".glb"))}" autoplay animation-name="${fields.name}" camera-orbit="${await orbit(t)}"
+        disable-zoom disable-pan interaction-prompt="none" shadow-intensity="0.8" environment-image="neutral"></model-viewer>
+        <video class="inset" src="${t.clip}" autoplay loop muted playsinline></video>`;
+    }
     t.el.classList.add("ready");
     t.el.classList.toggle("miss", !t.pass);
     t.el.onclick = () => openTake(t, fields.name);
@@ -351,10 +359,17 @@ $("go").onclick = async () => {
 };
 
 // Result
+async function orbit(t) {  // a three-quarter view of the creature's front, as facing.py found it
+  const facing = t.files.find(f => f.endsWith("facing.json"));
+  const pre = facing ? (await (await fetch(facing)).json()).pre : [1, 0, 0, 0, 0, 1];
+  return `${Math.atan2(-pre[4], pre[5]) * 180 / Math.PI - 30}deg 78deg auto`;
+}
+
 function openTake(t, name) {
   $("resultTitle").textContent = $("prompt").value.trim();
   const result = $("result");
   result.src = t.files.find(f => f.endsWith(".glb"));
+  orbit(t).then(o => result.cameraOrbit = o);
   const play = v => { result.animationName = name + v; result.play(); };
   segmented($("motion"), play);
   $("motion").querySelectorAll("button").forEach((b, i) => b.classList.toggle("on", i === 0));
