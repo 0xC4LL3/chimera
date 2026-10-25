@@ -1,7 +1,8 @@
 # Render the reference frame of a rigged GLB from a fixed side camera.
 # Usage: python pipeline/render_ref.py <in.glb> <out_dir> [action] [frame] [--split]
-# --split: a split screen instead, side view on the left and front view on the right, so the video
-# shows the creature from two angles at once (the creature faces -Y, the glTF convention).
+# --split: a split screen instead, three-quarter views from the front right (left panel) and front left
+# (right panel), so the video shows the creature from two angles at once (the creature faces -Y, the
+# glTF convention). The two copies face away from each other, so forward moves don't meet at the seam.
 # Writes ref.png and camera.json (intrinsics, camera matrix, 2D joint positions). With --split,
 # camera.json also lists both views, each with intrinsics in full-frame pixels and its x range.
 import bpy, sys, json, os, math
@@ -39,8 +40,8 @@ lo = Vector((min(p[i] for p in pts) for i in range(3)))
 hi = Vector((max(p[i] for p in pts) for i in range(3)))
 center, size = (lo + hi) / 2, (hi - lo)
 
-# Side camera on +X looking at -X (and front camera on -Y looking at +Y). Leave room so the action
-# can leave the rest bounds.
+# Side camera on +X looking at -X, or the two three-quarter cameras. Leave room so the action can
+# leave the rest bounds.
 PW = W // 2 if split else W  # panel width
 cam_data = bpy.data.cameras.new("Cam")
 cam_data.lens, cam_data.sensor_width, cam_data.sensor_fit = 50, 36, "HORIZONTAL"
@@ -51,7 +52,9 @@ scene.camera = cam
 fov = 2 * math.atan(18 / 50)
 views = [((1, 0, 0), size.y, size.x, (math.pi / 2, 0, math.pi / 2))]
 if split:
-    views.append(((0, -1, 0), size.x, size.y, (math.pi / 2, 0, 0)))
+    s = max(size.x, size.y)
+    views = [((math.sqrt(.5), -math.sqrt(.5), 0), s, s, (math.pi / 2, 0, math.pi / 4)),
+             ((-math.sqrt(.5), -math.sqrt(.5), 0), s, s, (math.pi / 2, 0, -math.pi / 4))]
 
 sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN"))
 sun.data.energy = 3
