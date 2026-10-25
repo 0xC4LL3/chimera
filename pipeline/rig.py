@@ -48,9 +48,21 @@ def import_model(path):
         bpy.ops.import_scene.gltf(filepath=path, guess_original_bind_pose=False)
 
 
+def drop_missing_textures(path):
+    # FBX textures are often separate files, referenced by a path from the author's machine: look
+    # for them by name next to the model, and drop the ones still missing so the material shows its
+    # base colour (not Blender's magenta). For renders and previews only; export.py keeps them.
+    bpy.ops.file.find_missing_files(directory=os.path.dirname(os.path.abspath(path)))
+    for m in bpy.data.materials:
+        for n in [n for n in (m.node_tree.nodes if m.node_tree else []) if n.type == "TEX_IMAGE"]:
+            if n.image is None or not (n.image.packed_file or os.path.exists(bpy.path.abspath(n.image.filepath))):
+                m.node_tree.nodes.remove(n)
+
+
 def load(path, run=None):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     import_model(path)
+    drop_missing_textures(path)
     scene = bpy.context.scene
     for o in list(bpy.data.objects):
         if (o.type == "MESH" and o.parent is None) or (o.type == "EMPTY" and o.name.endswith("_end")):
