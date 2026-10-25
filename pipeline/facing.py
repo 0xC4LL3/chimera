@@ -75,6 +75,8 @@ scene.render.resolution_x = scene.render.resolution_y = 384
 scene.view_settings.view_transform = "Standard"
 images = []
 for k, d in enumerate(dirs):
+    across = np.cross(d, [0, 0, 1])
+    cam.data.ortho_scale = 1.1 * max(np.ptp(p @ across), np.ptp(p[:, 2]))  # fill the view: a long body seen end-on is small
     cam.location = box + Vector((d * 2 * size).tolist())
     cam.rotation_euler = Vector((-d).tolist()).to_track_quat("-Z", "Y").to_euler()
     scene.render.filepath = os.path.join(run, f"facing_{k}.png")
