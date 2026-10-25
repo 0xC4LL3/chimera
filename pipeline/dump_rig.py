@@ -1,5 +1,5 @@
 # Dump a rig to plain arrays for the torch fitter.
-# Usage: python pipeline/dump_rig.py <in.glb> <run_dir>
+# Usage: python pipeline/dump_rig.py <in model> <run_dir>
 # Reads <run_dir>/camera.json for the reference action/frame, writes <run_dir>/rig.npz:
 # names, parents, rest (B,4,4), ref_basis (B,4,4), verts (V,3), faces (F,3), weights (V,B),
 # ref_verts (V,3) = Blender's own skinned mesh in the reference pose, for checking, and pre (4,4) =
@@ -15,9 +15,9 @@ import rig
 
 MAX_TRIS = 50000
 
-glb, run = rig.args()[:2]
+model, run = rig.args()[:2]
 cam = json.load(open(os.path.join(run, "camera.json")))
-arm, _ = rig.load(glb, run)
+arm, _ = rig.load(model, run)
 meshes = [o for o in bpy.data.objects if o.type == "MESH"]
 for o in meshes:
     o.data.calc_loop_triangles()

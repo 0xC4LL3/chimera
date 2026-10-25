@@ -1,10 +1,11 @@
 # Export a cleaned animation onto the user's original rig as GLB, FBX and BVH.
-# Usage: python pipeline/export.py <in.glb> <run_dir> <clean.npz> <out_dir> <clip_name>
+# Usage: python pipeline/export.py <in model> <run_dir> <clean.npz> <out_dir> <clip_name>
 # The pipeline works on a rebaked copy of the rig whose bones may be oriented differently, so the
 # motion is carried over as each bone's world-space deformation (posed matrix times inverse rest),
 # which does not depend on bone orientation, onto a fresh import of the user's file with its
-# transforms and bone orientations untouched. Both imports take the glTF node pose as rest, so
-# the deformations mean the same thing on both. rig.load also turned the creature (rig.npz "pre");
+# transforms and bone orientations untouched (an FBX keeps its centimetre root and axes, so the FBX
+# written back matches the original). Both imports go through rig.import_model, so they share the
+# rest pose and the deformations mean the same thing on both. rig.load also turned the creature (rig.npz "pre");
 # the deformations are turned back with it.
 # Writes <clip_name>.glb/.fbx with two actions (<clip_name> with root motion, <clip_name>_inplace)
 # and <clip_name>.bvh with root motion.
@@ -15,7 +16,7 @@ from mathutils import Matrix
 sys.path.append(os.path.dirname(__file__))
 import rig as rigmod
 
-glb, run, clean, out, clip = rigmod.args()[:5]
+model, run, clean, out, clip = rigmod.args()[:5]
 os.makedirs(out, exist_ok=True)
 FPS = 24
 
@@ -38,7 +39,7 @@ def deformations(basis):
 
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.gltf(filepath=glb, guess_original_bind_pose=False)
+rigmod.import_model(model)
 scene = bpy.context.scene
 scene.render.fps = FPS
 arm = next(o for o in scene.objects if o.type == "ARMATURE")

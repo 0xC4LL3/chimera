@@ -1,13 +1,13 @@
 # Keep only a model's meshes, posed by their skeleton's rest pose (the one rig.load uses), so a rigged
 # model can be re-rigged. Baking the pose keeps bone-parented parts (eyes) where the body puts them.
 # The meshes are joined into one: SkinTokens crashes Blender on meshes under 990 vertices (small eyes).
-# Usage: python pipeline/strip_rig.py <in.glb> <out.glb>
+# Usage: python pipeline/strip_rig.py <in model (GLB, glTF or FBX)> <out.glb>
 import bpy
 import rig
 
 src, dst = rig.args()[:2]
 bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.gltf(filepath=src, guess_original_bind_pose=False)
+rig.import_model(src)
 for arm in [o for o in bpy.data.objects if o.type == "ARMATURE"]:
     if arm.animation_data:
         arm.animation_data.action = None

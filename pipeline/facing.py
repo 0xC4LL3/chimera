@@ -1,6 +1,6 @@
 # Find the turn (about the vertical, and a shift across) that makes a creature face -Y with its mirror
 # plane at x=0, which the cameras and the fitter's symmetry assume. rig.load reads it from the run folder.
-# Usage: python pipeline/facing.py <in.glb> <run_dir>   (writes <run_dir>/facing.json)
+# Usage: python pipeline/facing.py <in model> <run_dir>   (writes <run_dir>/facing.json)
 # The mirror plane is the vertical plane through the mesh's centre that best maps the mesh onto itself.
 # The front is the one of the four views along and across that plane that an image-text model
 # (SigLIP 2) finds most like a front view and least like a back view: no rule on the shape alone tells
@@ -19,8 +19,8 @@ MODEL = "google/siglip2-so400m-patch14-384"
 TEXTS = ["a 3D render of a creature seen from the front, facing the camera, its face and eyes visible",
          "a 3D render of a creature seen from behind, its back to the camera"]
 
-glb, run = rig.args()[:2]
-rig.load(glb)
+model, run = rig.args()[:2]
+rig.load(model)
 deps = bpy.context.evaluated_depsgraph_get()
 pts = []
 for o in bpy.data.objects:

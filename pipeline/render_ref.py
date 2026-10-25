@@ -1,5 +1,5 @@
-# Render the reference frame of a rigged GLB from a fixed side camera.
-# Usage: python pipeline/render_ref.py <in.glb> <out_dir> [action] [frame] [--split]
+# Render the reference frame of a rigged model from a fixed side camera.
+# Usage: python pipeline/render_ref.py <in model> <out_dir> [action] [frame] [--split]
 # --split: a split screen instead, three-quarter views from the front right (left panel) and front left
 # (right panel), so the video shows the creature from two angles at once (the creature faces -Y, the
 # glTF convention). The two copies face away from each other, so forward moves don't meet at the seam.
@@ -14,14 +14,14 @@ sys.path.append(os.path.dirname(__file__))
 import rig
 
 split = "--split" in sys.argv
-glb, out = rig.args()[:2]
+model, out = rig.args()[:2]
 rest = [a for a in rig.args()[2:] if a != "--split"]
 action = rest[0] if rest else None
 frame = int(rest[1]) if len(rest) > 1 else 0
 W, H = 1024, 576  # LTX needs sizes divisible by 32
 os.makedirs(out, exist_ok=True)
 
-arm, _ = rig.load(glb, out)
+arm, _ = rig.load(model, out)
 scene = bpy.context.scene
 arm.animation_data.action = bpy.data.actions[action] if action else None
 if not action:

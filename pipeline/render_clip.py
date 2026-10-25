@@ -1,5 +1,5 @@
 # Render one of the rig's own animations from the reference camera, as a ground-truth test clip.
-# Usage: python pipeline/render_clip.py <in.glb> <run_dir>
+# Usage: python pipeline/render_clip.py <in model> <run_dir>
 # Uses the action in <run_dir>/camera.json (from render_ref.py), starting at its reference frame,
 # for at most 97 frames like a generated clip.
 # Writes <run_dir>/clip/####.png on a plain background and <run_dir>/gt.npz with world joint
@@ -10,9 +10,9 @@ import numpy as np
 sys.path.append(os.path.dirname(__file__))
 import rig
 
-glb, run = rig.args()[:2]
+model, run = rig.args()[:2]
 cam = json.load(open(os.path.join(run, "camera.json")))
-arm, _ = rig.load(glb, run)
+arm, _ = rig.load(model, run)
 action = bpy.data.actions[cam["action"]]
 arm.animation_data.action = action
 scene = bpy.context.scene

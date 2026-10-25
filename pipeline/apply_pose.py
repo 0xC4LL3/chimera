@@ -1,7 +1,7 @@
 # Key a fitted pose (from fit.py) onto the rig and render it from the reference camera, and
 # again from a camera turned 60 degrees around the creature (<out_dir>_turned), which shows the
 # motion towards and away from the reference camera that its own view cannot.
-# Usage: python pipeline/apply_pose.py <in.glb> <run_dir> <pose.npz> <out_dir>
+# Usage: python pipeline/apply_pose.py <in model> <run_dir> <pose.npz> <out_dir>
 import bpy, sys, os, json, math
 import numpy as np
 from mathutils import Matrix, Vector
@@ -9,12 +9,12 @@ from mathutils import Matrix, Vector
 sys.path.append(os.path.dirname(__file__))
 import rig
 
-glb, run, pose, out = rig.args()[:4]
+model, run, pose, out = rig.args()[:4]
 cam_info = json.load(open(os.path.join(run, "camera.json")))
 os.makedirs(out, exist_ok=True)
 data = np.load(pose)
 
-arm, _ = rig.load(glb, run)
+arm, _ = rig.load(model, run)
 arm.animation_data.action = bpy.data.actions.new("Fit")
 for i, frame in enumerate(data["basis"]):
     for name, m in zip(data["names"], frame):

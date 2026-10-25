@@ -1,5 +1,5 @@
-# Shared Blender helper: load a rigged GLB with object transforms baked into the data,
-# so armature space equals world space and the skeleton and mesh share one unit scale.
+# Shared Blender helper: load a rigged model (GLB, glTF or FBX) with object transforms baked into
+# the data, so armature space equals world space and the skeleton and mesh share one unit scale.
 # Given the run folder, the creature is also turned to face -Y with its mirror plane at x=0, as
 # facing.py found, which the cameras and the fitter's symmetry assume; export.py turns the motion
 # back for the user's file.
@@ -37,9 +37,20 @@ def bake(arm, pre=Matrix.Identity(4)):
             o.matrix_parent_inverse.identity()
 
 
-def load(glb, run=None):
+def import_model(path):
+    # Import a GLB/glTF or FBX into the current scene. Every script reads the user's model through
+    # this, so the rest pose and the bone and action names mean the same thing everywhere: for glTF
+    # the rest is the node pose, for FBX the bind pose. FBX files often carry an empty root scaled
+    # 0.01 (centimetres) and Y-up rotations; load() bakes those, export.py keeps them.
+    if path.lower().endswith(".fbx"):
+        bpy.ops.import_scene.fbx(filepath=path)
+    else:
+        bpy.ops.import_scene.gltf(filepath=path, guess_original_bind_pose=False)
+
+
+def load(path, run=None):
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.gltf(filepath=glb, guess_original_bind_pose=False)  # rest = glTF node pose
+    import_model(path)
     scene = bpy.context.scene
     for o in list(bpy.data.objects):
         if (o.type == "MESH" and o.parent is None) or (o.type == "EMPTY" and o.name.endswith("_end")):

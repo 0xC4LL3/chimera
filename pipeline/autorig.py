@@ -1,5 +1,5 @@
 # Rig an unrigged mesh with SkinTokens (TokenRig, MIT): skeleton and skin weights from the mesh alone.
-# Usage: python pipeline/autorig.py <in_mesh.glb> <out_rigged.glb> [skintokens_dir]
+# Usage: python pipeline/autorig.py <in model (GLB, glTF or FBX)> <out_rigged.glb> [skintokens_dir]
 # Any rig the model already has is stripped first (strip_rig.py), so the output always holds the new rig.
 # SkinTokens wants flash-attn, which has no build for this PyTorch; shims/flash_attn_interface.py
 # routes its attention calls to PyTorch's own, for it and its Blender helper process. Its demo's
