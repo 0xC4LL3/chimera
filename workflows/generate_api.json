@@ -49,7 +49,7 @@
  "pos": {
   "class_type": "CLIPTextEncode",
   "inputs": {
-   "text": "Split screen showing two synchronized views of the same creature at the same moment: a side view on the left and a front view on the right. The creature hovers in the air beating its wings, then lunges its head forward and snaps its jaws, then returns to hovering. Both views stay perfectly in sync. Static locked cameras, plain studio background, 3D render.",
+   "text": "Split screen showing two synchronized views of the same creature at the same moment: a three-quarter view from the front right on the left and a three-quarter view from the front left on the right. The creature hovers in the air beating its wings, then lunges its head forward and snaps its jaws, then returns to hovering. Both views stay perfectly in sync. Static locked cameras, plain studio background, 3D render.",
    "clip": [
     "clip",
     0

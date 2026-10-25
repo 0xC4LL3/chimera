@@ -28,9 +28,9 @@ def creature_path(creature):
 
 # The camera is the app's choice, so the app words it; the user's prompt only describes the action.
 FRAMING = {
-    True: ("Split screen showing two synchronized views of the same creature at the same moment: a side view on "
-           "the left and a front view on the right. {} Both views stay perfectly in sync. Static locked cameras, "
-           "plain studio background, 3D render."),
+    True: ("Split screen showing two synchronized views of the same creature at the same moment: a three-quarter "
+           "view from the front right on the left and a three-quarter view from the front left on the right. {} "
+           "Both views stay perfectly in sync. Static locked cameras, plain studio background, 3D render."),
     False: "{} Side view, static locked camera, plain studio background, 3D render.",
 }
 

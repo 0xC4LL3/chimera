@@ -46,14 +46,14 @@ class LoadCreature(IO.ComfyNode):
                  if p.suffix.lower() in (".glb", ".gltf")]
         return IO.Schema(
             node_id="ChimeraLoadCreature", display_name="Load Creature (Chimera)", category="chimera",
-            description="Render a rigged creature as the video's first frame: side and front views side by side, or the side view alone.",
+            description="Render a rigged creature as the video's first frame: two three-quarter views side by side, or the side view alone.",
             inputs=[
                 IO.Combo.Input("model_file", options=sorted(files), upload=IO.UploadType.model),
                 IO.String.Input("start_action", default="", tooltip="Animation whose first frame is the starting pose; empty for the rest pose."),
                 IO.Int.Input("start_frame", default=0, min=0),
                 IO.Boolean.Input("grounded", default=True, tooltip="Creature stands on the ground: the capture keeps it above the floor and locks feet that touch it."),
                 IO.Boolean.Input("auto_rig", default=False, tooltip="The model has no rig: build a skeleton and skin weights for it with SkinTokens first."),
-                IO.Boolean.Input("split_screen", default=True, tooltip="Show the side and front views side by side, so the clip shows the motion from two angles. Say so in the prompt."),
+                IO.Boolean.Input("split_screen", default=True, tooltip="Show two three-quarter views side by side, so the clip shows the motion from two angles. Say so in the prompt."),
             ],
             outputs=[Run.Output(display_name="run"), IO.Image.Output(display_name="reference")],
         )
