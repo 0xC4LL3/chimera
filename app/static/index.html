@@ -163,7 +163,6 @@
           <summary>More options</summary>
           <div class="opts">
             <span>Takes</span><div class="seg" id="count"><button data-v="1">1</button><button data-v="2">2</button><button class="on" data-v="3">3</button><button data-v="4">4</button></div>
-            <span>Two camera angles</span><button class="switch on" id="split" aria-label="Two camera angles" title="Film the side and the front together: the motion is captured more accurately."></button>
           </div>
         </details>
         <button class="go" id="go" disabled>Animate</button>
@@ -271,7 +270,6 @@ $("ideas").querySelectorAll("button").forEach(b => b.onclick = () => {
   updateGo();
 });
 segmented($("ground")); segmented($("count"));
-$("split").onclick = () => $("split").classList.toggle("on");
 const updateGo = () => $("go").disabled = !creature || !$("prompt").value.trim();
 $("prompt").oninput = updateGo;
 $("prompt").onkeydown = e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !$("go").disabled) $("go").click(); };
@@ -296,7 +294,7 @@ function render() {
   takes.forEach(t => {
     const span = t.el.querySelector(".meta span");
     const s = Math.round((Date.now() - t.since) / 1000);
-    span.textContent = t.state === "queue" ? "In queue" : t.state === "waitcap" ? "Capture queued" : t.state === "video" ? `Filming · ${fmt(s)}` :
+    span.textContent = t.state === "queue" ? "In queue" : t.state === "waitcap" ? "Capture queued" : t.state === "video" ? `${t.wide ? "Filming from two angles" : "Filming"} · ${fmt(s)}` :
       t.state === "capture" ? `Capturing motion · ${fmt(s)}` : t.state === "error" ? "Failed" : t.pass ? "Open" : "Poor fit";
   });
   const note = $("note");
@@ -312,17 +310,25 @@ function render() {
   if (!busy.length) { clearInterval(clock); $("go").disabled = false; $("go").textContent = "Animate again"; }
 }
 
-async function runTake(t, genId, fields) {
+async function runTake(t, genId, fields, prompt) {
   try {
-    const clip = await waitJob(genId, () => { t.state = "video"; t.since = Date.now(); render(); });
-    t.clip = clip[0];
-    t.el.querySelector(".media").innerHTML = `<video src="${t.clip}" autoplay loop muted playsinline></video>`;
-    t.state = "waitcap"; render();
-    const { job } = await post("/api/capture", { ...fields, clip: genId, loop: true });
-    t.files = await waitJob(job, () => { t.state = "capture"; t.since = Date.now(); render(); });
-    const report = await (await fetch(t.files.find(f => f.endsWith("check.json")))).json();
-    t.pass = report.ok;
-    t.motion = report.motion;
+    for (const split of [false, true]) {
+      if (split) {  // the side view didn't fit: film the take again from two angles, which also see turns toward the camera
+        t.wide = true; t.state = "queue";
+        t.el.querySelector(".media").className = "media busy"; render();
+        genId = (await post("/api/generate", { ...fields, prompt, split_screen: true, count: 1 })).jobs[0];
+      }
+      const clip = await waitJob(genId, () => { t.state = "video"; t.since = Date.now(); render(); });
+      t.clip = clip[0];
+      t.el.querySelector(".media").innerHTML = `<video src="${t.clip}" autoplay loop muted playsinline></video>`;
+      t.state = "waitcap"; render();
+      const { job } = await post("/api/capture", { ...fields, split_screen: split, clip: genId, loop: true });
+      t.files = await waitJob(job, () => { t.state = "capture"; t.since = Date.now(); render(); });
+      const report = await (await fetch(t.files.find(f => f.endsWith("check.json")))).json();
+      t.pass = report.ok;
+      t.motion = report.motion;
+      if (t.pass) break;
+    }
     t.state = "done";
     const media = t.el.querySelector(".media");
     media.classList.remove("busy");
@@ -344,7 +350,7 @@ async function runTake(t, genId, fields) {
 $("go").onclick = async () => {
   const prompt = $("prompt").value.trim();
   const fields = { creature, action: $("pose").value, frame: 0, grounded: segValue($("ground")) === "1",
-    auto_rig: !info.bones, split_screen: $("split").classList.contains("on"), name: clipName(prompt) };
+    auto_rig: !info.bones, name: clipName(prompt) };
   $("go").disabled = true;
   $("grid").innerHTML = ""; $("note").hidden = true; showAll = false;
   $("takes").hidden = false;
@@ -356,7 +362,7 @@ $("go").onclick = async () => {
       el.innerHTML = `<div class="media busy"></div><div class="meta"><b>Take ${i + 1}</b><span></span></div>`;
       return { el, state: "queue", since: Date.now() };
     });
-    jobs.forEach((id, i) => runTake(takes[i], id, fields));
+    jobs.forEach((id, i) => runTake(takes[i], id, fields, prompt));
     clearInterval(clock); clock = setInterval(render, 1000);
     render();
     $("takes").scrollIntoView({ behavior: "smooth", block: "start" });

@@ -78,13 +78,13 @@ class LoadCreature(IO.ComfyNode):
                 IO.Int.Input("start_frame", default=0, min=0),
                 IO.Boolean.Input("grounded", default=True, tooltip="Creature stands on the ground: the capture keeps it above the floor and locks feet that touch it."),
                 IO.Boolean.Input("auto_rig", default=False, tooltip="The model has no rig: build a skeleton and skin weights for it with SkinTokens first."),
-                IO.Boolean.Input("split_screen", default=True, tooltip="Show two three-quarter views side by side, so the clip shows the motion from two angles. Say so in the prompt."),
+                IO.Boolean.Input("split_screen", default=False, tooltip="Show two three-quarter views side by side instead of the side view, so the clip shows the motion from two angles (turns toward the camera too). Say so in the prompt."),
             ],
             outputs=[Run.Output(display_name="run"), IO.Image.Output(display_name="reference")],
         )
 
     @classmethod
-    def execute(cls, model_file, start_action, start_frame, grounded, auto_rig=False, split_screen=True):
+    def execute(cls, model_file, start_action, start_frame, grounded, auto_rig=False, split_screen=False):
         model = folder_paths.get_annotated_filepath(model_file)
         run = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(model).stem}_{time.strftime('%Y%m%d_%H%M%S')}")
         os.makedirs(run)

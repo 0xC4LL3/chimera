@@ -105,7 +105,7 @@ def sample_creature(name: str):
 
 @app.post("/api/generate")
 def generate(creature: str = Form(), prompt: str = Form(), action: str = Form(""), frame: int = Form(0),
-             grounded: bool = Form(True), auto_rig: bool = Form(False), split_screen: bool = Form(True),
+             grounded: bool = Form(True), auto_rig: bool = Form(False), split_screen: bool = Form(False),
              count: int = Form(3)):
     ids = []
     for _ in range(count):
@@ -119,7 +119,7 @@ def generate(creature: str = Form(), prompt: str = Form(), action: str = Form(""
 
 @app.post("/api/capture")
 def capture(creature: str = Form(), clip: str = Form(), action: str = Form(""), frame: int = Form(0),
-            grounded: bool = Form(True), auto_rig: bool = Form(False), split_screen: bool = Form(True),
+            grounded: bool = Form(True), auto_rig: bool = Form(False), split_screen: bool = Form(False),
             name: str = Form("attack"), loop: bool = Form(True)):
     video = next((DATA / clip).glob("save_clip_*"), None)
     if video is None:

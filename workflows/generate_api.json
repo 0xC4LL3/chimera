@@ -7,7 +7,7 @@
    "start_frame": 0,
    "grounded": false,
    "auto_rig": false,
-   "split_screen": true
+   "split_screen": false
   }
  },
  "unet": {
@@ -82,7 +82,7 @@
  "framing": {
   "class_type": "PrimitiveStringMultiline",
   "inputs": {
-   "value": "Split screen showing two synchronized views of the same creature at the same moment: a three-quarter view from the front right on the left and a three-quarter view from the front left on the right. {action} Both views stay perfectly in sync. Static locked cameras, plain studio background, 3D render."
+   "value": "{action} Side view, static locked camera, plain studio background, 3D render."
   }
  },
  "prompt": {

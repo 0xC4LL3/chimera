@@ -7,7 +7,7 @@
    "start_frame": 0,
    "grounded": false,
    "auto_rig": false,
-   "split_screen": true
+   "split_screen": false
   }
  },
  "clip": {
