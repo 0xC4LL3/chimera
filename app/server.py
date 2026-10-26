@@ -30,12 +30,13 @@ def creature_path(creature):
     return files[0]
 
 
-# The camera is the app's choice, so the app words it; the user's prompt only describes the action.
+# The camera is the app's choice, so the app words it; the user's prompt only describes the action, which the
+# workflow first rewrites for this creature's body (a local vision-language model looking at the first frame).
 FRAMING = {
     True: ("Split screen showing two synchronized views of the same creature at the same moment: a three-quarter "
-           "view from the front right on the left and a three-quarter view from the front left on the right. {} "
+           "view from the front right on the left and a three-quarter view from the front left on the right. {action} "
            "Both views stay perfectly in sync. Static locked cameras, plain studio background, 3D render."),
-    False: "{} Side view, static locked camera, plain studio background, 3D render.",
+    False: "{action} Side view, static locked camera, plain studio background, 3D render.",
 }
 
 
@@ -109,7 +110,8 @@ def generate(creature: str = Form(), prompt: str = Form(), action: str = Form(""
     ids = []
     for _ in range(count):
         wf = workflow("generate_api.json", creature, action, frame, grounded, auto_rig, split_screen)
-        wf.set_input("pos", "text", FRAMING[split_screen].format(prompt.strip()))
+        wf.set_input("rewrite", "prompt", "Action: " + prompt.strip())
+        wf.set_input("framing", "value", FRAMING[split_screen])
         wf.set_input("noise", "noise_seed", random.randrange(2**48))
         ids.append(submit(wf))
     return {"jobs": ids}
