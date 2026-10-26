@@ -80,11 +80,26 @@
    "frame_rate": 24
   }
  },
+ "size": {
+  "class_type": "GetImageSize",
+  "inputs": {
+   "image": [
+    "creature",
+    1
+   ]
+  }
+ },
  "lat": {
   "class_type": "EmptyLTXVLatentVideo",
   "inputs": {
-   "width": 1024,
-   "height": 576,
+   "width": [
+    "size",
+    0
+   ],
+   "height": [
+    "size",
+    1
+   ],
    "length": 97,
    "batch_size": 1
   }
