@@ -1,6 +1,6 @@
 # Render the reference frame of a rigged model from a fixed side camera.
 # Usage: python pipeline/render_ref.py <in model> <out_dir> [action] [frame] [--split]
-# --split: a split screen instead, three-quarter views from the front right (left panel) and front left
+# --split: a wider split screen instead, three-quarter views from the front right (left panel) and front left
 # (right panel), so the video shows the creature from two angles at once (the creature faces -Y, the
 # glTF convention). The two copies face away from each other, so forward moves don't meet at the seam.
 # Writes ref.png and camera.json (intrinsics, camera matrix, 2D joint positions). With --split,
@@ -18,7 +18,7 @@ model, out = rig.args()[:2]
 rest = [a for a in rig.args()[2:] if a != "--split"]
 action = rest[0] if rest else None
 frame = int(rest[1]) if len(rest) > 1 else 0
-W, H = 1024, 576  # LTX needs sizes divisible by 32
+W, H = (1536, 640) if split else (1024, 576)  # divisible by 32 for LTX; split panels nearly as large as the single view
 os.makedirs(out, exist_ok=True)
 
 arm, _ = rig.load(model, out)
