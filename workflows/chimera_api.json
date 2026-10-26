@@ -46,10 +46,66 @@
    "img_compression": 18
   }
  },
+ "rw_clip": {
+  "class_type": "CLIPLoader",
+  "inputs": {
+   "clip_name": "qwen3.8_27b_w4a8.safetensors",
+   "type": "stable_diffusion"
+  }
+ },
+ "rw_sys": {
+  "class_type": "PrimitiveStringMultiline",
+  "inputs": {
+   "value": "You write action descriptions for an image-to-video model that animates a 3D creature. The image is the first frame of the video. The user gives a short action. Rewrite it as two to four plain sentences that:\n- name the body parts this creature actually has, as seen in the image (how many legs, arms, wings, tails, claws, horns, fins or tentacles, and where they are);\n- describe the action as a short sequence of beats: which parts move, in which direction, how far and how fast;\n- make every movement large, fast and deliberate, so it is clearly visible; never use the words slow, slowly, gentle, gently, slight, slightly, soft, softly or subtle;\n- keep the creature in the same spot, facing the same way the whole time (no turning, no walking away);\n- end with the creature back in its starting pose.\nCount the limbs carefully before you write. Never add body parts the creature does not have. If the action needs a part the creature lacks, use the closest part it has. Do not mention the cameras, the views, the background or the style. Start with \"The creature\" or the creature's name. Output only the description."
+  }
+ },
+ "rewrite": {
+  "class_type": "TextGenerate",
+  "inputs": {
+   "clip": [
+    "rw_clip",
+    0
+   ],
+   "prompt": "Action: The creature hovers in the air beating its wings, then lunges its head forward and snaps its jaws, then returns to hovering.",
+   "image": [
+    "creature",
+    1
+   ],
+   "max_length": 400,
+   "sampling_mode": "off",
+   "system_prompt": [
+    "rw_sys",
+    0
+   ]
+  }
+ },
+ "framing": {
+  "class_type": "PrimitiveStringMultiline",
+  "inputs": {
+   "value": "Split screen showing two synchronized views of the same creature at the same moment: a three-quarter view from the front right on the left and a three-quarter view from the front left on the right. {action} Both views stay perfectly in sync. Static locked cameras, plain studio background, 3D render."
+  }
+ },
+ "prompt": {
+  "class_type": "StringReplace",
+  "inputs": {
+   "string": [
+    "framing",
+    0
+   ],
+   "find": "{action}",
+   "replace": [
+    "rewrite",
+    0
+   ]
+  }
+ },
  "pos": {
   "class_type": "CLIPTextEncode",
   "inputs": {
-   "text": "Split screen showing two synchronized views of the same creature at the same moment: a three-quarter view from the front right on the left and a three-quarter view from the front left on the right. The creature hovers in the air beating its wings, then lunges its head forward and snaps its jaws, then returns to hovering. Both views stay perfectly in sync. Static locked cameras, plain studio background, 3D render.",
+   "text": [
+    "prompt",
+    0
+   ],
    "clip": [
     "clip",
     0
@@ -80,11 +136,26 @@
    "frame_rate": 24
   }
  },
+ "size": {
+  "class_type": "GetImageSize",
+  "inputs": {
+   "image": [
+    "creature",
+    1
+   ]
+  }
+ },
  "lat": {
   "class_type": "EmptyLTXVLatentVideo",
   "inputs": {
-   "width": 1024,
-   "height": 576,
+   "width": [
+    "size",
+    0
+   ],
+   "height": [
+    "size",
+    1
+   ],
    "length": 97,
    "batch_size": 1
   }
