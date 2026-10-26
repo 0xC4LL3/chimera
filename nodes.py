@@ -123,7 +123,7 @@ class CaptureMotion(IO.ComfyNode):
         shutil.copytree(creature, run)
         clip = os.path.join(run, "clip.mp4")
         video.save_to(clip)
-        python("track.py", clip, os.path.join(run, "tracks.npz"), vram_gb=9)
+        python("track.py", clip, os.path.join(run, "tracks.npz"), os.path.join(run, "camera.json"), vram_gb=9)
         python("fit.py", run, clip, os.path.join(run, "pose.npz"), os.path.join(run, "tracks.npz"),
                *(["--grounded"] if run_info(run)["grounded"] else []), vram_gb=2)
         return IO.NodeOutput(run)
