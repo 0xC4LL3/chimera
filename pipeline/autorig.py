@@ -21,10 +21,23 @@ import transformers
 _from_config = transformers.AutoModelForCausalLM.from_config
 transformers.AutoModelForCausalLM.from_config = lambda *a, **kw: _from_config(*a, **{**kw, "attn_implementation": "sdpa"})
 
+import torch
+# Beam search can grow until it fills the card, and on Windows the driver then spills into system memory
+# for many minutes and fails (or worse). Stay within 12 GB, and on running out retry with fewer beams.
+torch.cuda.set_per_process_memory_fraction(min(1.0, 12 * 2**30 / torch.cuda.get_device_properties(0).total_memory))
+
 import demo
 demo.start_bpy_server()
 demo.wait_for_bpy_server(timeout=120)
-demo.run_cli(Namespace(input=mesh, output=dst, top_k=5, top_p=0.95, temperature=1.0, repetition_penalty=2.0,
-                       num_beams=10, use_skeleton=False, use_transfer=True, use_postprocess=False,
-                       model_ckpt=demo.MODEL_CKPTS[0], hf_path=None))
+for beams in (10, 4, 1):
+    try:
+        demo.run_cli(Namespace(input=mesh, output=dst, top_k=5, top_p=0.95, temperature=1.0, repetition_penalty=2.0,
+                               num_beams=beams, use_skeleton=False, use_transfer=True, use_postprocess=False,
+                               model_ckpt=demo.MODEL_CKPTS[0], hf_path=None))
+        break
+    except torch.OutOfMemoryError:
+        torch.cuda.empty_cache()
+        print(f"out of memory with {beams} beams")
+else:
+    raise RuntimeError("auto-rig ran out of GPU memory")
 print("rigged", dst)
