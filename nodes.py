@@ -34,6 +34,19 @@ def python(script, *args, vram_gb=1):
     return call([sys.executable, os.path.join(PIPELINE, script), *args])
 
 
+def rig_model(model, out):
+    # Rig an unrigged model with SkinTokens; returns the rigged GLB. SkinTokens now and then decodes a
+    # malformed skeleton; a new try decodes afresh.
+    dst = os.path.join(out, "rigged.glb")
+    for attempt in range(3):
+        try:
+            python("autorig.py", model, dst, vram_gb=12)
+            return dst
+        except RuntimeError:
+            if attempt == 2:
+                raise
+
+
 def run_info(run):
     return json.load(open(os.path.join(run, "run.json")))
 
@@ -67,6 +80,29 @@ class PreviewModel(IO.ComfyNode):
         return IO.NodeOutput(Types.File3D(os.path.join(out, "preview.glb")), info, ui={"text": [info], "files": files})
 
 
+class AutoRig(IO.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return IO.Schema(
+            node_id="ChimeraAutoRig", display_name="Auto-Rig (Chimera)", category="chimera",
+            description="Build a skeleton and skin weights for an unrigged model with SkinTokens, before animating it, and a GLB that shows the new bones.",
+            inputs=[IO.Combo.Input("model_file", options=model_files(), upload=IO.UploadType.model)],
+            outputs=[IO.File3DGLB.Output(display_name="glb")],
+            is_output_node=True,
+        )
+
+    @classmethod
+    def execute(cls, model_file):
+        model = folder_paths.get_annotated_filepath(model_file)
+        out = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(model).stem}_rig_{time.strftime('%Y%m%d_%H%M%S')}")
+        os.makedirs(out)
+        rigged = rig_model(model, out)
+        blender("preview_model.py", rigged, out)
+        sub = os.path.relpath(out, folder_paths.get_output_directory())
+        files = [{"filename": f, "subfolder": sub, "type": "output"} for f in ("rigged.glb", "skeleton.glb", "info.json")]
+        return IO.NodeOutput(Types.File3D(rigged), ui={"files": files})
+
+
 class LoadCreature(IO.ComfyNode):
     @classmethod
     def define_schema(cls):
@@ -90,14 +126,7 @@ class LoadCreature(IO.ComfyNode):
         run = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(model).stem}_{time.strftime('%Y%m%d_%H%M%S')}")
         os.makedirs(run)
         if auto_rig:
-            for attempt in range(3):  # SkinTokens now and then decodes a malformed skeleton; a new try decodes afresh
-                try:
-                    python("autorig.py", model, os.path.join(run, "rigged.glb"), vram_gb=12)
-                    break
-                except RuntimeError:
-                    if attempt == 2:
-                        raise
-            model = os.path.join(run, "rigged.glb")
+            model = rig_model(model, run)
         json.dump({"model": model, "grounded": grounded}, open(os.path.join(run, "run.json"), "w"))
         python("facing.py", model, run, vram_gb=3)
         blender("render_ref.py", model, run, *([start_action, str(start_frame)] if start_action else []), *(["--split"] if split_screen else []))
@@ -203,7 +232,7 @@ class Overlay(IO.ComfyNode):
 
 class ChimeraExtension(ComfyExtension):
     async def get_node_list(self):
-        return [PreviewModel, LoadCreature, CaptureMotion, CleanupMotion, ExportAnimation, Overlay]
+        return [PreviewModel, AutoRig, LoadCreature, CaptureMotion, CleanupMotion, ExportAnimation, Overlay]
 
 
 async def comfy_entrypoint():

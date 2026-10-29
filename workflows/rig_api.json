@@ -1,0 +1,8 @@
+{
+ "rig": {
+  "class_type": "ChimeraAutoRig",
+  "inputs": {
+   "model_file": "3d/frog.glb"
+  }
+ }
+}
