@@ -1,0 +1,17 @@
+# Install into the Python 3.13 environment used by ComfyUI.
+# ComfyUI supplies torch and torchvision with CUDA support.
+bpy==5.2.2
+numpy==2.5.2
+pillow==12.3.0
+opencv-python-headless==5.0.0.93
+scipy==1.18.1
+av==19.0.2
+transformers==5.20.2
+einops==0.8.2
+# SkinTokens inference dependencies. Its Gradio UI is unused.
+diffusers==0.42.0
+lightning==2.6.6
+omegaconf==2.4.0
+trimesh==5.2.0
+bottle==0.13.4
+tornado==6.6
