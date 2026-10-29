@@ -6,6 +6,8 @@ The shipped workflows run open-weight models locally through ComfyUI. They use n
 
 Download these exact files into the indicated folders under `ComfyUI/models`. The five files total about 53.2 GB. Links point to the publishers' repositories.
 
+LTX-2.5 requires a Hugging Face account. Sign in and accept the access terms on the [LTX-2.5 model page](https://huggingface.co/Lightricks/LTX-2.5) before downloading its files.
+
 | Folder | File and download |
 | --- | --- |
 | `diffusion_models` | [ltx-2.5-22b-distilled-transformer-nvfp4.safetensors](https://huggingface.co/Lightricks/LTX-2.5/resolve/main/diffusion_models/ltx-2.5-22b-distilled-transformer-nvfp4.safetensors) |

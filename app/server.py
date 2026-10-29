@@ -27,7 +27,7 @@ async def backend_unavailable(request, error):
     return JSONResponse(status_code=503, content={"detail": "Cannot reach ComfyUI. Start the backend with ./run.sh and try again."})
 
 
-MODELS = (".glb", ".gltf", ".fbx")
+MODELS = (".glb", ".fbx")
 
 
 def creature_path(creature):
