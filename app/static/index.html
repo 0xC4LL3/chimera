@@ -51,6 +51,10 @@
   .stage model-viewer { display: block; width: 100%; height: 470px; --poster-color: transparent; }
   .chip { position: absolute; top: 14px; left: 14px; font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: 99px;
     background: var(--sunken); color: var(--muted); border: 1px solid var(--line); }
+  .chip.working::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%;
+    background: var(--accent); vertical-align: 1px; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .chip.retry { cursor: pointer; color: var(--text); }
   .bones { position: absolute; left: 14px; top: calc(470px - 46px); font-size: 13px; color: var(--muted); padding: 5px 12px;
     border-radius: 99px; background: var(--sunken); border: 1px solid var(--line); }
   .bones:hover, .bones.on { color: var(--text); }
@@ -256,7 +260,7 @@ async function useCreature(previewUrl, register) {
     const mine = creature;  // the bones arrive a few seconds later, without holding anything up
     (info.skeleton ? Promise.resolve(info) : post(`/api/skeleton/${mine}`))
       .then(r => creature === mine && showSkeleton(r.skeleton, false)).catch(() => {});
-  } else $("rigChip").textContent = "Will be auto-rigged";
+  } else autoRig();
   $("poseRow").hidden = !info.animations.length;
   $("pose").innerHTML = `<option value="">Rest pose</option>` +
     info.animations.map(a => `<option value="${a}">${a.split("|").pop().replace(/_/g, " ")}</option>`).join("");
@@ -275,6 +279,29 @@ function setBones(on) {
   $("preview").src = on ? skeletonUrl : bodyUrl;
 }
 $("bonesBtn").onclick = () => setBones(!$("bonesBtn").classList.contains("on"));
+
+async function autoRig() {
+  const mine = creature, t0 = Date.now(), chip = $("rigChip");
+  const tick = () => chip.textContent = `Rigging · ${fmt(Math.floor((Date.now() - t0) / 1000))}`;
+  chip.className = "chip working"; chip.onclick = null; tick();
+  const timer = setInterval(tick, 1000);
+  try {
+    const r = await post(`/api/rig/${mine}`);
+    if (creature !== mine) return;
+    info.bones = r.bones;
+    chip.textContent = `${r.bones} bones · auto-rigged`;
+    showSkeleton(r.skeleton, true);
+    updateGo();
+  } catch (e) {
+    if (creature !== mine) return;
+    chip.textContent = "Auto-rigging failed · retry";
+    chip.classList.add("retry");
+    chip.onclick = autoRig;
+  } finally {
+    clearInterval(timer);
+    chip.classList.remove("working");
+  }
+}
 
 function pickFile(file) {
   if (file) useCreature(/\.fbx$/i.test(file.name) ? null : URL.createObjectURL(file), () => post("/api/creature", { file }));
@@ -297,7 +324,7 @@ $("ideas").querySelectorAll("button").forEach(b => b.onclick = () => {
   updateGo();
 });
 segmented($("ground")); segmented($("count"));
-const updateGo = () => $("go").disabled = !creature || !$("prompt").value.trim();
+const updateGo = () => $("go").disabled = !creature || !info.bones || !$("prompt").value.trim();
 $("prompt").oninput = updateGo;
 $("prompt").onkeydown = e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !$("go").disabled) $("go").click(); };
 

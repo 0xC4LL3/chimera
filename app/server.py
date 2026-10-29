@@ -24,6 +24,8 @@ MODELS = (".glb", ".gltf", ".fbx")
 
 
 def creature_path(creature):
+    if (DATA / creature / "rigged.glb").exists():  # auto-rigged after upload (/api/rig)
+        return DATA / creature / "rigged.glb"
     files = [p for p in (DATA / creature).glob("*") if p.suffix.lower() in MODELS]
     if not files:
         raise HTTPException(404, "unknown creature")
@@ -100,6 +102,19 @@ def preview(path):
 def skeleton(creature: str):
     # The bones of a model that came with a rig, for the preview.
     return {"skeleton": skeleton_url(preview(creature_path(creature)))}
+
+
+@app.post("/api/rig/{creature}")
+def rig(creature: str):
+    # Auto-rig an unrigged model once, right after upload: every take then uses this same rig.
+    wf = comfy.workflows.from_file(WORKFLOWS / "rig_api.json")
+    wf.set_input("rig", "model_file", comfy.assets.from_file(creature_path(creature)))
+    try:
+        out = run_into(wf, DATA / creature / "rig", timeout=1800)
+    except JobFailed:
+        raise HTTPException(500, "Auto-rigging failed. Try again, or upload a rigged model.")
+    (out / "rigged.glb").rename(DATA / creature / "rigged.glb")
+    return {"bones": json.loads((out / "info.json").read_text())["bones"], "skeleton": skeleton_url(out)}
 
 
 def add_creature(name, src):
