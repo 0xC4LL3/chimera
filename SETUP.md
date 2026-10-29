@@ -61,4 +61,4 @@ Upload a GLB or FBX, wait for the rig preview, enter a short action and generate
 - If the app cannot connect, inspect `runs/app.log`, `runs/proxy.log` and `runs/comfyui.log`.
 - Restart ComfyUI after changing node or pipeline code. Cached node results can otherwise preserve an earlier result.
 - A missing `TextGenerate` or LTX node means ComfyUI needs updating. A missing model error names the required file in [MODELS.md](MODELS.md).
-- This setup has been checked against the installed development environment. A clean machine installation has not yet been verified.
+- The app dependencies were installed in a fresh virtual environment and the app served successfully. The full GPU setup has been checked against the development environment. A clean machine installation of the GPU stack has not yet been verified.
