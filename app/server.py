@@ -3,8 +3,10 @@
 # deployment; only COMFY_BASE_URL (and COMFY_API_KEY for hosted backends) changes.
 # Run: COMFY_BASE_URL=http://127.0.0.1:8189 app/.venv/bin/uvicorn server:app --app-dir app --port 8000
 import json, random, shutil, struct, uuid
+import httpx
 from pathlib import Path
 from fastapi import FastAPI, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from comfy_sdk import Comfy
 from comfy_sdk.exceptions import JobFailed
@@ -18,6 +20,11 @@ SAMPLES = HERE / "samples"  # Quaternius (CC0) and Scenario (CC BY 4.0) creature
 comfy = Comfy(timeout=120)
 app = FastAPI()
 jobs = {}  # job id -> Job
+
+
+@app.exception_handler(httpx.ConnectError)
+async def backend_unavailable(request, error):
+    return JSONResponse(status_code=503, content={"detail": "Cannot reach ComfyUI. Start the backend with ./run.sh and try again."})
 
 
 MODELS = (".glb", ".gltf", ".fbx")
@@ -144,7 +151,7 @@ def sample_creature(name: str):
 @app.post("/api/generate")
 def generate(creature: str = Form(), prompt: str = Form(), action: str = Form(""), frame: int = Form(0),
              grounded: bool = Form(True), auto_rig: bool = Form(False), split_screen: bool = Form(False),
-             count: int = Form(3)):
+             count: int = Form(3, ge=1, le=4)):
     ids = []
     for _ in range(count):
         wf = workflow("generate_api.json", creature, action, frame, grounded, auto_rig, split_screen)

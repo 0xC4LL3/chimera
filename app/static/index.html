@@ -206,19 +206,29 @@
 const $ = id => document.getElementById(id);
 const SAMPLES = [["dragon", "Dragon"], ["wolf", "Wolf"], ["frog", "Frog · no rig"], ["fox", "Fox · no rig"]];
 const IDEAS = ["Roars and stomps", "Leaps forward and lands", "Shakes its whole body"];
-let creature = null, info = null, takes = [], showAll = false, clock = null;
+let creature = null, info = null, takes = [], showAll = false, clock = null, revision = 0, busy = false;
+
+async function responseJson(r) {
+  if (!r.ok) {
+    let message = `Request failed (${r.status})`;
+    try { message = (await r.json()).detail || message; } catch {}
+    throw new Error(message);
+  }
+  return r.json();
+}
 
 async function post(url, fields = {}) {
   const body = new FormData();
   for (const [k, v] of Object.entries(fields)) body.append(k, v);
   const r = await fetch(url, { method: "POST", body });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  return responseJson(r);
 }
 
-async function waitJob(id, onRunning) {
+async function waitJob(id, mine, onRunning) {
   for (;;) {
-    const j = await (await fetch(`/api/job/${id}`)).json();
+    if (mine !== revision) throw new Error("Model changed");
+    const j = await responseJson(await fetch(`/api/job/${id}`));
+    if (mine !== revision) throw new Error("Model changed");
     if (j.status === "succeeded") return j.files;
     if (["failed", "canceled", "expired"].includes(j.status)) throw new Error(j.error || j.status);
     if (onRunning && /run|progress/i.test(j.status)) { onRunning(); onRunning = null; }
@@ -236,20 +246,26 @@ const segValue = el => el.querySelector(".on").dataset.v;
 
 // Creature
 async function useCreature(previewUrl, register) {
+  const mine = ++revision;
+  creature = null; info = null; busy = false; takes = [];
+  clearInterval(clock);
+  $("detail").close();
   $("start").hidden = true;
   $("studio").hidden = false;
   $("takes").hidden = true;
   $("preview").src = previewUrl || "";  // none for FBX: the browser shows the GLB the server makes of it
   $("rigChip").textContent = "Reading model…";
   $("rigChip").className = "chip";
+  $("rigChip").onclick = null;
   $("bonesBtn").hidden = true;
   $("go").disabled = true;
   try {
-    info = await register();
+    const registered = await register();
+    if (mine !== revision) return;
+    info = registered;
   } catch (e) {
-    let msg = "Couldn't read this model";
-    try { msg = JSON.parse(e.message).detail || msg; } catch {}
-    $("rigChip").textContent = msg;
+    if (mine !== revision) return;
+    $("rigChip").textContent = e.message || "Couldn't read this model";
     return;
   }
   if (!previewUrl) $("preview").src = info.preview;
@@ -262,8 +278,9 @@ async function useCreature(previewUrl, register) {
       .then(r => creature === mine && showSkeleton(r.skeleton, false)).catch(() => {});
   } else autoRig();
   $("poseRow").hidden = !info.animations.length;
-  $("pose").innerHTML = `<option value="">Rest pose</option>` +
-    info.animations.map(a => `<option value="${a}">${a.split("|").pop().replace(/_/g, " ")}</option>`).join("");
+  $("pose").replaceChildren(new Option("Rest pose", ""),
+    ...info.animations.map(a => new Option(a.split("|").pop().replace(/_/g, " "), a)));
+  $("go").textContent = "Animate";
   updateGo();
 }
 
@@ -282,7 +299,7 @@ $("bonesBtn").onclick = () => setBones(!$("bonesBtn").classList.contains("on"));
 
 async function autoRig() {
   const mine = creature, t0 = Date.now(), chip = $("rigChip");
-  const tick = () => chip.textContent = `Rigging · ${fmt(Math.floor((Date.now() - t0) / 1000))}`;
+  const tick = () => { if (creature === mine) chip.textContent = `Rigging · ${fmt(Math.floor((Date.now() - t0) / 1000))}`; };
   chip.className = "chip working"; chip.onclick = null; tick();
   const timer = setInterval(tick, 1000);
   try {
@@ -299,7 +316,7 @@ async function autoRig() {
     chip.onclick = autoRig;
   } finally {
     clearInterval(timer);
-    chip.classList.remove("working");
+    if (creature === mine) chip.classList.remove("working");
   }
 }
 
@@ -315,7 +332,11 @@ $("samples").innerHTML = SAMPLES.map(([id, name]) =>
   `<button class="sample" data-id="${id}"><img src="/thumbs/${id}.png" alt=""><span>${name}</span></button>`).join("");
 $("samples").querySelectorAll(".sample").forEach(b => b.onclick = () =>
   useCreature(`/samples/${b.dataset.id}.glb`, () => post(`/api/sample/${b.dataset.id}`)));
-$("change").onclick = $("home").onclick = () => { creature = null; $("studio").hidden = true; $("start").hidden = false; $("file").value = ""; };
+$("change").onclick = $("home").onclick = () => {
+  revision++; creature = null; info = null; busy = false; takes = [];
+  clearInterval(clock); $("detail").close();
+  $("studio").hidden = true; $("start").hidden = false; $("file").value = "";
+};
 
 // Move
 $("ideas").innerHTML = IDEAS.map(i => `<button>${i}</button>`).join("");
@@ -324,7 +345,7 @@ $("ideas").querySelectorAll("button").forEach(b => b.onclick = () => {
   updateGo();
 });
 segmented($("ground")); segmented($("count"));
-const updateGo = () => $("go").disabled = !creature || !info.bones || !$("prompt").value.trim();
+const updateGo = () => $("go").disabled = busy || !creature || !info?.bones || !$("prompt").value.trim();
 $("prompt").oninput = updateGo;
 $("prompt").onkeydown = e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !$("go").disabled) $("go").click(); };
 
@@ -358,50 +379,63 @@ function render() {
     note.innerHTML = failed ? "Something went wrong preparing this model. Try again, or try another model." : showAll ? `<button>Hide takes that didn't fit</button>` :
       `${good.length ? "" : "No take fit your creature well. Try again or reword the move. "}` +
       `${misses.length} ${misses.length > 1 ? "takes" : "take"} hidden because the skeleton couldn't follow the video. <button>Show</button>`;
+    if (failed && takes[0].error) note.textContent = takes[0].error;
     if (!failed) note.querySelector("button").onclick = () => { showAll = !showAll; render(); };
   }
   $("takesStatus").textContent = busy.length ? `${done.length} of ${takes.length} ready` : "";
-  if (!busy.length) { clearInterval(clock); $("go").disabled = false; $("go").textContent = "Animate again"; }
+  if (!busy.length) { clearInterval(clock); finishTakes(); }
 }
 
-async function runTake(t, genId, fields, prompt) {
+function finishTakes() { busy = false; updateGo(); $("go").textContent = "Animate again"; }
+
+async function runTake(t, genId, fields, prompt, mine) {
   try {
     for (const split of [false, true]) {
+      if (mine !== revision) return;
       if (split) {  // the side view didn't fit: film the take again from two angles, which also see turns toward the camera
         t.wide = true; t.state = "queue";
         t.el.querySelector(".media").className = "media busy"; render();
         genId = (await post("/api/generate", { ...fields, prompt, split_screen: true, count: 1 })).jobs[0];
       }
-      const clip = await waitJob(genId, () => { t.state = "video"; t.since = Date.now(); render(); });
+      const clip = await waitJob(genId, mine, () => { t.state = "video"; t.since = Date.now(); render(); });
       t.clip = clip[0];
       t.el.querySelector(".media").innerHTML = `<video src="${t.clip}" autoplay loop muted playsinline></video>`;
       t.state = "waitcap"; render();
       const { job } = await post("/api/capture", { ...fields, split_screen: split, clip: genId, loop: true });
-      t.files = await waitJob(job, () => { t.state = "capture"; t.since = Date.now(); render(); });
-      const report = await (await fetch(t.files.find(f => f.endsWith("check.json")))).json();
+      t.files = await waitJob(job, mine, () => { t.state = "capture"; t.since = Date.now(); render(); });
+      const report = await responseJson(await fetch(t.files.find(f => f.endsWith("check.json"))));
+      if (mine !== revision) return;
       t.pass = report.ok;
       t.motion = report.motion;
       if (t.pass) break;
     }
-    t.state = "done";
     const media = t.el.querySelector(".media");
     media.classList.remove("busy");
     if (t.pass) {  // the creature itself doing the move, with the filmed take as an inset
-      media.innerHTML = `<model-viewer src="${t.files.find(f => f.endsWith(".glb"))}" autoplay animation-name="${fields.name}" camera-orbit="${await orbit(t)}"
+      const camera = await orbit(t);
+      if (mine !== revision) return;
+      media.innerHTML = `<model-viewer src="${t.files.find(f => f.endsWith(".glb"))}" autoplay animation-name="${fields.name}" camera-orbit="${camera}"
         disable-zoom disable-pan interaction-prompt="none" shadow-intensity="0.8" environment-image="neutral"></model-viewer>
         <video class="inset" src="${t.clip}" autoplay loop muted playsinline></video>`;
     }
+    t.state = "done";
     t.el.classList.add("ready");
     t.el.classList.toggle("miss", !t.pass);
     t.el.onclick = () => openTake(t, fields.name);
   } catch (e) {
+    if (mine !== revision) return;
     t.state = "error";
+    t.error = e.message;
+    t.el.title = e.message;
     t.el.querySelector(".media").classList.remove("busy");
   }
   render();
 }
 
 $("go").onclick = async () => {
+  if (busy) return;
+  const mine = revision;
+  busy = true;
   const prompt = $("prompt").value.trim();
   const fields = { creature, action: $("pose").value, frame: 0, grounded: segValue($("ground")) === "1",
     auto_rig: !info.bones, name: clipName(prompt) };
@@ -410,19 +444,21 @@ $("go").onclick = async () => {
   $("takes").hidden = false;
   try {
     const { jobs } = await post("/api/generate", { ...fields, prompt, count: segValue($("count")) });
+    if (mine !== revision) return;
     takes = jobs.map((id, i) => {
       const el = document.createElement("div");
       el.className = "take";
       el.innerHTML = `<div class="media busy"></div><div class="meta"><b>Take ${i + 1}</b><span></span></div>`;
-      return { el, state: "queue", since: Date.now() };
+      return { el, prompt, state: "queue", since: Date.now() };
     });
-    jobs.forEach((id, i) => runTake(takes[i], id, fields, prompt));
+    jobs.forEach((id, i) => runTake(takes[i], id, fields, prompt, mine));
     clearInterval(clock); clock = setInterval(render, 1000);
     render();
     $("takes").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
+    if (mine !== revision) return;
     $("takesStatus").textContent = "Couldn't start: " + e.message;
-    $("go").disabled = false;
+    busy = false; updateGo();
   }
 };
 
@@ -434,7 +470,7 @@ async function orbit(t) {  // a three-quarter view of the creature's front, as f
 }
 
 function openTake(t, name) {
-  $("resultTitle").textContent = $("prompt").value.trim();
+  $("resultTitle").textContent = t.prompt;
   const result = $("result");
   result.src = t.files.find(f => f.endsWith(".glb"));
   orbit(t).then(o => result.cameraOrbit = o);
