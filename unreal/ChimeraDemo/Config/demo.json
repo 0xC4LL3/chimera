@@ -1,0 +1,7 @@
+{
+  "source_fbx": "runs/hero/takes1/a1_t2/export_a1_t2.fbx",
+  "source_label": "Inherited rear take 2, stage setup only",
+  "animation_hint": "inplace",
+  "hero_height_cm": 240,
+  "hero_yaw_degrees": 0
+}
