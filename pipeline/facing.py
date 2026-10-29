@@ -4,7 +4,8 @@
 # The mirror plane is the vertical plane through the mesh's centre that best maps the mesh onto itself.
 # The front is the one of the four views along and across that plane that an image-text model
 # (SigLIP 2) finds most like a front view and least like a back view: no rule on the shape alone tells
-# a head from a tail, a shell or a backpack for every anatomy.
+# a head from a tail, a shell or a backpack for every anatomy. A model with the custom property
+# chimera_facing = "as_is" (glTF extras) is kept as modelled.
 import bpy, sys, os, math, json
 import numpy as np, torch
 from mathutils import Matrix, Vector
@@ -21,6 +22,11 @@ TEXTS = ["a 3D render of a creature seen from the front, facing the camera, its 
 
 model, run = rig.args()[:2]
 rig.load(model)
+if any(o.get("chimera_facing") == "as_is" for o in bpy.data.objects):
+    # The model says it already faces -Y with its mirror plane at x=0: a machine, whose near-symmetries
+    # (a trebuchet's frame front to back) could fool the search below.
+    json.dump({"pre": [float(i == j) for i in range(4) for j in range(4)], "scores": []}, open(os.path.join(run, "facing.json"), "w"))
+    sys.exit()
 deps = bpy.context.evaluated_depsgraph_get()
 pts = []
 for o in bpy.data.objects:
