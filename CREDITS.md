@@ -4,6 +4,7 @@
 
 | File | Creator and source | License | Changes |
 | --- | --- | --- | --- |
+| `app/samples/chimera.glb` | Project owner, generated with Tripo | Included with the owner's permission | Wings and redundant lion tail removed. Original snake sculpt preserved. Custom 35-bone rig and revised skin weights. No input animations. |
 | `app/samples/dragon.glb` | [Quaternius](https://quaternius.com/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | Packaged as GLB for the app. Includes source animation clips. |
 | `app/samples/wolf.glb` | [Quaternius](https://quaternius.com/) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) | Packaged as GLB for the app. Includes source animation clips. |
 | `app/samples/frog.glb` | [Scenario, asset 7pPB6zpujCKZz1tD5qsq8AQ3](https://huggingface.co/datasets/scenario-labs/3d-collection/blob/main/assets/scenario_asset_7pPB6zpujCKZz1tD5qsq8AQ3/output.glb) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | Renamed for the app. Input has no rig or animation. |

@@ -204,7 +204,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const SAMPLES = [["dragon", "Dragon"], ["wolf", "Wolf"], ["frog", "Frog · no rig"], ["fox", "Fox · no rig"]];
+const SAMPLES = [["chimera", "Chimera · no animations"], ["wolf", "Wolf"], ["frog", "Frog · no rig"], ["fox", "Fox · no rig"]];
 const IDEAS = ["Roars and stomps", "Leaps forward and lands", "Shakes its whole body"];
 let creature = null, info = null, takes = [], showAll = false, clock = null, revision = 0, busy = false;
 
@@ -272,7 +272,7 @@ async function useCreature(previewUrl, register) {
   creature = info.creature;
   bodyUrl = $("preview").src;
   if (info.bones) {
-    $("rigChip").textContent = `${info.bones} bones`;
+    $("rigChip").textContent = `${info.bones} bones${info.animations.length ? "" : " · no animations"}`;
     const mine = creature;  // the bones arrive a few seconds later, without holding anything up
     (info.skeleton ? Promise.resolve(info) : post(`/api/skeleton/${mine}`))
       .then(r => creature === mine && showSkeleton(r.skeleton, false)).catch(() => {});
