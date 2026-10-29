@@ -51,6 +51,10 @@
   .stage model-viewer { display: block; width: 100%; height: 470px; --poster-color: transparent; }
   .chip { position: absolute; top: 14px; left: 14px; font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: 99px;
     background: var(--sunken); color: var(--muted); border: 1px solid var(--line); }
+  .bones { position: absolute; left: 14px; top: calc(470px - 46px); font-size: 13px; color: var(--muted); padding: 5px 12px;
+    border-radius: 99px; background: var(--sunken); border: 1px solid var(--line); }
+  .bones:hover, .bones.on { color: var(--text); }
+  .bones.on { background: var(--surface); box-shadow: var(--shadow); color: var(--accent); border-color: var(--accent); }
   .change { position: absolute; top: 12px; right: 12px; font-size: 13px; color: var(--muted); padding: 5px 10px; border-radius: 99px; }
   .change:hover { color: var(--text); background: var(--sunken); }
   .pose { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
@@ -119,6 +123,7 @@
   @media (max-width: 860px) {
     h1 { font-size: 40px; }
     .stage model-viewer { height: 340px; }
+    .bones { top: calc(340px - 46px); }
     .studio, .result { grid-template-columns: 1fr; }
     .samples div { grid-template-columns: repeat(2, 1fr); }
     .grid { grid-template-columns: 1fr; }
@@ -151,6 +156,7 @@
       <div class="stage">
         <model-viewer id="preview" camera-controls auto-rotate interaction-prompt="none" shadow-intensity="0.8" environment-image="neutral" exposure="1.05"></model-viewer>
         <span class="chip" id="rigChip"></span>
+        <button class="bones" id="bonesBtn" hidden>Bones</button>
         <button class="change" id="change">Change model</button>
         <div class="pose" id="poseRow" hidden><span>Start from</span><select id="pose"></select></div>
       </div>
@@ -231,6 +237,8 @@ async function useCreature(previewUrl, register) {
   $("takes").hidden = true;
   $("preview").src = previewUrl || "";  // none for FBX: the browser shows the GLB the server makes of it
   $("rigChip").textContent = "Reading model…";
+  $("rigChip").className = "chip";
+  $("bonesBtn").hidden = true;
   $("go").disabled = true;
   try {
     info = await register();
@@ -242,12 +250,31 @@ async function useCreature(previewUrl, register) {
   }
   if (!previewUrl) $("preview").src = info.preview;
   creature = info.creature;
-  $("rigChip").textContent = info.bones ? `${info.bones} bones` : "Will be auto-rigged";
+  bodyUrl = $("preview").src;
+  if (info.bones) {
+    $("rigChip").textContent = `${info.bones} bones`;
+    const mine = creature;  // the bones arrive a few seconds later, without holding anything up
+    (info.skeleton ? Promise.resolve(info) : post(`/api/skeleton/${mine}`))
+      .then(r => creature === mine && showSkeleton(r.skeleton, false)).catch(() => {});
+  } else $("rigChip").textContent = "Will be auto-rigged";
   $("poseRow").hidden = !info.animations.length;
   $("pose").innerHTML = `<option value="">Rest pose</option>` +
     info.animations.map(a => `<option value="${a}">${a.split("|").pop().replace(/_/g, " ")}</option>`).join("");
   updateGo();
 }
+
+// The rig: an unrigged model is rigged once, right away, and the preview can show the bones of either kind.
+let bodyUrl = null, skeletonUrl = null;
+function showSkeleton(url, on) {
+  skeletonUrl = url;
+  $("bonesBtn").hidden = !url;
+  setBones(on && !!url);
+}
+function setBones(on) {
+  $("bonesBtn").classList.toggle("on", on);
+  $("preview").src = on ? skeletonUrl : bodyUrl;
+}
+$("bonesBtn").onclick = () => setBones(!$("bonesBtn").classList.contains("on"));
 
 function pickFile(file) {
   if (file) useCreature(/\.fbx$/i.test(file.name) ? null : URL.createObjectURL(file), () => post("/api/creature", { file }));
@@ -261,7 +288,7 @@ $("samples").innerHTML = SAMPLES.map(([id, name]) =>
   `<button class="sample" data-id="${id}"><img src="/thumbs/${id}.png" alt=""><span>${name}</span></button>`).join("");
 $("samples").querySelectorAll(".sample").forEach(b => b.onclick = () =>
   useCreature(`/samples/${b.dataset.id}.glb`, () => post(`/api/sample/${b.dataset.id}`)));
-$("change").onclick = $("home").onclick = () => { $("studio").hidden = true; $("start").hidden = false; $("file").value = ""; };
+$("change").onclick = $("home").onclick = () => { creature = null; $("studio").hidden = true; $("start").hidden = false; $("file").value = ""; };
 
 // Move
 $("ideas").innerHTML = IDEAS.map(i => `<button>${i}</button>`).join("");

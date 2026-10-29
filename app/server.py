@@ -66,17 +66,40 @@ def model_info(path):
         return {"bones": sum(len(s["joints"]) for s in doc.get("skins", [])),
                 "animations": [a.get("name", f"Animation {i + 1}") for i, a in enumerate(doc.get("animations", []))],
                 "preview": f"/data/{path.parent.name}/{path.name}"}
-    wf = comfy.workflows.from_file(WORKFLOWS / "preview_api.json")
-    wf.set_input("preview", "model_file", comfy.assets.from_file(path))
-    out = path.parent / "preview"
-    out.mkdir()
     try:
-        outputs = comfy.run(wf, timeout=600).outputs
+        out = preview(path)
     except JobFailed:
         raise HTTPException(400, "Can't read this FBX. Try binary FBX 7.1+ or GLB.")
-    for o in outputs:
+    return {**json.loads((out / "info.json").read_text()), "preview": url(out / "preview.glb"), "skeleton": skeleton_url(out)}
+
+
+def url(path):
+    return "/" + str(path.relative_to(HERE))
+
+
+def skeleton_url(folder):
+    return url(folder / "skeleton.glb") if (folder / "skeleton.glb").exists() else None
+
+
+def run_into(wf, out, timeout=600):
+    # Run a workflow and save its output files into a folder.
+    out.mkdir(exist_ok=True)
+    for o in comfy.run(wf, timeout=timeout).outputs:
         o.to_file(out / o.name)
-    return {**json.loads((out / "info.json").read_text()), "preview": f"/data/{path.parent.name}/preview/preview.glb"}
+    return out
+
+
+def preview(path):
+    # A GLB the browser can show, the model's bone count and animations, and for a rigged model its bones.
+    wf = comfy.workflows.from_file(WORKFLOWS / "preview_api.json")
+    wf.set_input("preview", "model_file", comfy.assets.from_file(path))
+    return run_into(wf, path.parent / "preview")
+
+
+@app.post("/api/skeleton/{creature}")
+def skeleton(creature: str):
+    # The bones of a model that came with a rig, for the preview.
+    return {"skeleton": skeleton_url(preview(creature_path(creature)))}
 
 
 def add_creature(name, src):
