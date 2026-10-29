@@ -29,6 +29,12 @@ These keys control the editor preview. For the film, label the shot **Unreal Eng
 
 The recording operator can place one command in `Saved/command.py`, such as `play()`, `play(1)` to select another imported clip or `seek(1.5)`. The controller consumes that file on the next editor tick and writes the outcome to `Saved/command-result.txt`. `stop()` removes the controller callback. The keyboard controller is inactive during Play In Editor. Close Unreal to release its GPU memory.
 
+For native playback evidence, write `import playback; playback.start()` to `Saved/command.py`. It starts Play In Editor and plays the imported clip at normal speed from each camera. It records the engine animation time, bone positions and a screenshot for each view under `Saved/playback`. The session ends automatically. Inspect this evidence to confirm playback before filming.
+
+For clean film footage, write `import capture; capture.start(component, animations[clip_index])` to `Saved/command.py`. It renders the imported animation at 24 fps from all three cameras into `Saved/captures`. These are sampled engine preview frames. `Saved/latest-capture.txt` points to the current folder and its `status.json` reports progress. Review the first images before letting the full sequence finish. `import capture; capture.stop()` cancels it.
+
+After capture completes, run `python3 unreal/ChimeraDemo/Scripts/encode_capture.py <capture-folder>` from WSL. It writes the three 1080p videos and their source record to `runs/submission/unreal/<capture-folder-name>`. The PNG originals stay in the project. Keep a screenshot of the real editor alongside the clean footage to show the actual import and preview.
+
 ## Storage
 
 `Content`, `Saved`, `Intermediate` and `DerivedDataCache` are generated and ignored by Git. The UE 5.8 cache graph reads the installed engine cache and writes new derived data into this project. No C++ module or build is required.

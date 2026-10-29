@@ -2,11 +2,13 @@
 import ctypes
 import json
 import os
+import sys
 import traceback
 from pathlib import Path
 import unreal
 
 PROJECT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT / "Scripts"))
 SAVED = PROJECT / "Saved"
 handle = None
 component = None
