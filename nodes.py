@@ -49,7 +49,7 @@ class PreviewModel(IO.ComfyNode):
     def define_schema(cls):
         return IO.Schema(
             node_id="ChimeraPreviewModel", display_name="Preview Model (Chimera)", category="chimera",
-            description="A GLB of any model Chimera reads (GLB, glTF or FBX), and its bone count and animations, for showing it before animating.",
+            description="A GLB of any model Chimera reads (GLB, glTF or FBX), its bone count and animations, and for a rigged model a GLB that shows its bones, for showing it before animating.",
             inputs=[IO.Combo.Input("model_file", options=model_files(), upload=IO.UploadType.model)],
             outputs=[IO.File3DGLB.Output(display_name="glb"), IO.String.Output(display_name="info")],
             is_output_node=True,
@@ -62,7 +62,8 @@ class PreviewModel(IO.ComfyNode):
         blender("preview_model.py", model, out)
         info = open(os.path.join(out, "info.json")).read()
         sub = os.path.relpath(out, folder_paths.get_output_directory())
-        files = [{"filename": f, "subfolder": sub, "type": "output"} for f in ("preview.glb", "info.json")]  # API clients only receive files
+        files = [{"filename": f, "subfolder": sub, "type": "output"}  # API clients only receive files
+                 for f in ("preview.glb", "info.json", "skeleton.glb") if os.path.exists(os.path.join(out, f))]
         return IO.NodeOutput(Types.File3D(os.path.join(out, "preview.glb")), info, ui={"text": [info], "files": files})
 
 
