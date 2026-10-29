@@ -2,7 +2,7 @@
 # Each node wraps one pipeline script, run as a subprocess of ComfyUI's own Python: scene work
 # through Blender's Python API (the bpy package), the rest through torch. A subprocess keeps
 # Blender's global state out of ComfyUI. Steps share a run folder, passed as CHIMERA_RUN.
-import json, os, shutil, subprocess, sys, time
+import json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
 import numpy as np, torch
 from PIL import Image
@@ -23,7 +23,8 @@ def call(cmd):
 
 
 def blender(script, *args):
-    call([sys.executable, os.path.join(PIPELINE, script), *args])
+    # Reference and overlay renders also use the GPU outside ComfyUI's process.
+    python(script, *args, vram_gb=2)
 
 
 def python(script, *args, vram_gb=1):
@@ -51,6 +52,12 @@ def run_info(run):
     return json.load(open(os.path.join(run, "run.json")))
 
 
+def new_run(name):
+    base = os.path.join(folder_paths.get_output_directory(), "chimera")
+    os.makedirs(base, exist_ok=True)
+    return tempfile.mkdtemp(prefix=name + "_", dir=base)
+
+
 def model_files():
     base = Path(folder_paths.get_input_directory())  # uploads land in 3d/ (editor) or the root (API)
     return sorted(str(p.relative_to(base)).replace("\\", "/") for p in base.rglob("*")
@@ -71,7 +78,7 @@ class PreviewModel(IO.ComfyNode):
     @classmethod
     def execute(cls, model_file):
         model = folder_paths.get_annotated_filepath(model_file)
-        out = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(model).stem}_preview_{time.strftime('%Y%m%d_%H%M%S')}")
+        out = new_run(Path(model).stem + "_preview")
         blender("preview_model.py", model, out)
         info = open(os.path.join(out, "info.json")).read()
         sub = os.path.relpath(out, folder_paths.get_output_directory())
@@ -94,8 +101,7 @@ class AutoRig(IO.ComfyNode):
     @classmethod
     def execute(cls, model_file):
         model = folder_paths.get_annotated_filepath(model_file)
-        out = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(model).stem}_rig_{time.strftime('%Y%m%d_%H%M%S')}")
-        os.makedirs(out)
+        out = new_run(Path(model).stem + "_rig")
         rigged = rig_model(model, out)
         blender("preview_model.py", rigged, out)
         sub = os.path.relpath(out, folder_paths.get_output_directory())
@@ -123,8 +129,7 @@ class LoadCreature(IO.ComfyNode):
     @classmethod
     def execute(cls, model_file, start_action, start_frame, grounded, auto_rig=False, split_screen=False):
         model = folder_paths.get_annotated_filepath(model_file)
-        run = os.path.join(folder_paths.get_output_directory(), "chimera", f"{Path(model).stem}_{time.strftime('%Y%m%d_%H%M%S')}")
-        os.makedirs(run)
+        run = new_run(Path(model).stem)
         if auto_rig:
             model = rig_model(model, run)
         json.dump({"model": model, "grounded": grounded}, open(os.path.join(run, "run.json"), "w"))
@@ -147,10 +152,11 @@ class CaptureMotion(IO.ComfyNode):
 
     @classmethod
     def execute(cls, run, video):
-        # ComfyUI caches Load Creature, so every capture of one creature would share its folder;
-        # give each capture its own copy of the creature data instead.
-        creature, run = run, f"{run}_capture_{time.strftime('%H%M%S')}"
-        shutil.copytree(creature, run)
+        # Captures share the immutable rig arrays. Every take owns its motion and video files.
+        creature, run = run, new_run(Path(run).name + "_capture")
+        os.link(os.path.join(creature, "rig.npz"), os.path.join(run, "rig.npz"))
+        for name in ("run.json", "camera.json", "facing.json", "ref.png"):
+            shutil.copy2(os.path.join(creature, name), os.path.join(run, name))
         clip = os.path.join(run, "clip.mp4")
         video.save_to(clip)
         python("track.py", clip, os.path.join(run, "tracks.npz"), os.path.join(run, "camera.json"), vram_gb=9)
@@ -203,6 +209,8 @@ class ExportAnimation(IO.ComfyNode):
 
     @classmethod
     def execute(cls, run, clip_name):
+        if not clip_name.strip() or clip_name in (".", "..") or any(c in clip_name for c in '/\\\0'):
+            raise ValueError("Use a clip name without path separators.")
         out = os.path.join(run, "export")
         blender("export.py", run_info(run)["model"], run, os.path.join(run, "clean.npz"), out, clip_name)
         sub = os.path.relpath(out, folder_paths.get_output_directory())
