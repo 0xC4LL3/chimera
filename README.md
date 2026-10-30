@@ -6,9 +6,9 @@ Chimera turns a 3D model and a text prompt into an editable skeletal animation. 
 
 The input can be a new character with no animation clips. Models without a skeleton can be rigged with SkinTokens. The web app uses the Comfy SDK with a local ComfyUI backend. All inference in the shipped workflows uses open-weight models.
 
-[![Watch the Chimera demonstration](docs/demo-poster.jpg)](docs/demo.mp4)
+[![The captured animation, shown with the rig it was fitted to](docs/hero.gif)](https://0xc4ll3.github.io/chimera/)
 
-[Watch the 1:59 demo](docs/demo.mp4). It shows the real app, a separate auto-rig example, captured skeletal animation, an original articulated lamp and the exported FBX in Unreal Engine. Captions and music, with no voice.
+**[Watch the 1:59 demo and orbit real results in your browser](https://0xc4ll3.github.io/chimera/).** The film shows the real app, a separate auto-rig example, captured skeletal animation, an original articulated lamp and the exported FBX in Unreal Engine. Captions and music, with no voice. The [film file](docs/demo.mp4) is also in this repository.
 
 ## Try the captured example
 
