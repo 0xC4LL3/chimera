@@ -20,7 +20,7 @@ LTX-2.5 generates the motion video. Gemma encodes its prompt. Qwen looks at the 
 
 These file choices have been used on an RTX 5080 with 16 GB VRAM and 64 GB system RAM. The NVFP4 transformer targets Blackwell GPUs. Other GPU configurations need separate validation. Keep the `--cache-ram 12` launch option so ComfyUI can evict cached models under memory pressure.
 
-The [LTX-2.5 model card](https://huggingface.co/Lightricks/LTX-2.5) links its community license. The [ComfyUI Qwen package](https://huggingface.co/Comfy-Org/Qwen3.8-27B) is marked Apache-2.0. Model terms are separate from Chimera's GPL code license.
+The [LTX-2.5 model card](https://huggingface.co/Lightricks/LTX-2.5) links its community license. The [ComfyUI Qwen package](https://huggingface.co/Comfy-Org/Qwen3.8-27B) is marked Apache-2.0. Model terms are separate from Chimera's MIT code license.
 
 ## Rigging, tracking and facing
 

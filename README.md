@@ -59,4 +59,4 @@ Fast limbs, camera-facing turns and invented anatomy can produce poor captures. 
 
 ## License
 
-Chimera's code is [GPL-3.0](LICENSE). Third-party models and sample assets retain their own licenses, listed in [CREDITS.md](CREDITS.md) and [MODELS.md](MODELS.md).
+Chimera's original code is licensed under [MIT](LICENSE). Third-party models and sample assets retain their own licenses, listed in [CREDITS.md](CREDITS.md) and [MODELS.md](MODELS.md).
