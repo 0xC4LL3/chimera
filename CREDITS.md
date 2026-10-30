@@ -30,6 +30,13 @@ The instrumental demo soundtrack was generated with ACE-Step 1.5 through ComfyUI
 - [AllTracker](https://github.com/aharley/alltracker), MIT, tracks points through generated video.
 - [SigLIP 2](https://huggingface.co/google/siglip2-so400m-patch14-384), Apache-2.0, estimates facing direction.
 - [Blender](https://www.blender.org/) imports, renders and exports 3D assets.
+- [Unreal Engine](https://www.unrealengine.com/eula/unreal) displays the exported FBX in the demo.
 - [model-viewer](https://modelviewer.dev/) displays GLB models and animations in the browser.
 
 The fitting approach draws on the published idea of matching a skinned mesh to video through silhouette and point correspondences. Chimera's implementation is in `pipeline/fit.py` and `pipeline/rigtorch.py`.
+
+## Unreal Engine notice
+
+Chimera uses Unreal® Engine. Unreal® is a trademark or registered trademark of Epic Games, Inc. in the United States of America and elsewhere.
+
+Unreal® Engine, Copyright 1998 – 2026, Epic Games, Inc. All rights reserved.
