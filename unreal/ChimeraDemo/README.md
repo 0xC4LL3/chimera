@@ -8,7 +8,7 @@ This UE 5.8 project imports the actual FBX exported by Chimera as a skeletal mes
 
 1. Close other GPU workloads. On the shared development machine, follow [RESOURCE_COORDINATION.md](../../RESOURCE_COORDINATION.md).
 2. `Config/demo.json` already selects the bundled rear example and its in-place clip. To use another export, set `source_fbx` relative to the Chimera repository and choose one clip with `animation_hint`.
-3. Run `launch.ps1 -Build` from Windows PowerShell. The project may be on a WSL UNC path. The script uses the installed UE 5.8 by default; pass `-Engine` for a different installation path.
+3. Open Windows PowerShell in `unreal/ChimeraDemo` and run `.\launch.ps1 -Build`. The project may be on a WSL UNC path. The script uses the installed UE 5.8 by default; pass `-Engine` for a different installation path.
 
 The build creates `/Game/Chimera/Stage/L_Chimera` and writes `Saved/demo-state.json` with the actual source file, imported assets, duration and bone count. Rebuilding replaces the generated level and its `Hero` import folder. The source FBX stays untouched. WSL network paths use a temporary Windows drive mapping through `launch.cmd`.
 
@@ -16,7 +16,7 @@ The stage uses a charcoal floor, a low plinth with a copper edge and three soft 
 
 ## Review and film
 
-Run `launch.ps1` after the first successful build. In the focused Unreal editor:
+Run `.\launch.ps1` from the same directory after the first successful build. In the focused Unreal editor:
 
 | Key | Action |
 | --- | --- |
@@ -33,9 +33,9 @@ For native playback evidence, write `import playback; playback.start()` to `Save
 
 For clean film footage, write `import capture; capture.start(component, animations[clip_index])` to `Saved/command.py`. It renders the imported animation at 24 fps from all three cameras into `Saved/captures`. These are sampled engine preview frames. `Saved/latest-capture.txt` points to the current folder and its `status.json` reports progress. Review the first images before letting the full sequence finish. `import capture; capture.stop()` cancels it.
 
-After capture completes, run `python3 unreal/ChimeraDemo/Scripts/encode_capture.py <capture-folder>` from WSL. It writes the three 1080p videos and their source record to `runs/submission/unreal/<capture-folder-name>`. The PNG originals stay in the project. Keep a screenshot of the real editor alongside the clean footage to show the actual import and preview.
+Video encoding requires FFmpeg with `libx264` support, available as `ffmpeg` in the WSL PATH. After capture completes, run `python3 unreal/ChimeraDemo/Scripts/encode_capture.py <capture-folder>` from the repository root in WSL. It writes the three 1080p videos and their source record to `runs/submission/unreal/<capture-folder-name>`. The PNG originals stay in the project. Keep a screenshot of the real editor alongside the clean footage to show the actual import and preview.
 
-`capture-editor.ps1 -EditorPid <pid>` records the real editor window at 1920×1080 into `Saved/editor-proof.png`. Wait for screenshot notifications to clear before using it.
+Run `.\capture-editor.ps1 -EditorPid <pid>` from `unreal/ChimeraDemo` in Windows PowerShell to record the real editor window at 1920×1080 into `Saved/editor-proof.png`. Wait for screenshot notifications to clear before using it.
 
 ## Storage
 
