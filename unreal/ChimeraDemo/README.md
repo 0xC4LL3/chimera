@@ -6,7 +6,7 @@ This UE 5.8 project imports the actual FBX exported by Chimera as a skeletal mes
 
 ## Build the scene
 
-1. Close other GPU workloads. On the shared development machine, follow [RESOURCE_COORDINATION.md](../../RESOURCE_COORDINATION.md).
+1. Close other GPU workloads.
 2. `Config/demo.json` already selects the bundled rear example and its in-place clip. To use another export, set `source_fbx` relative to the Chimera repository and choose one clip with `animation_hint`.
 3. Open Windows PowerShell in `unreal/ChimeraDemo` and run `.\launch.ps1 -Build`. The project may be on a WSL UNC path. The script uses the installed UE 5.8 by default; pass `-Engine` for a different installation path.
 
