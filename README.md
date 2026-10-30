@@ -8,7 +8,7 @@ The input can be a new character with no animation clips. Models without a skele
 
 [![Watch the Chimera demonstration](docs/demo-poster.jpg)](docs/demo.mp4)
 
-[Watch the 1:52 demo](docs/demo.mp4). It shows the real app, a separate auto-rig example, captured skeletal animation, an original articulated lamp and the exported FBX in Unreal Engine. Captions and music, with no voice.
+[Watch the 1:59 demo](docs/demo.mp4). It shows the real app, a separate auto-rig example, captured skeletal animation, an original articulated lamp and the exported FBX in Unreal Engine. Captions and music, with no voice.
 
 ## Try the captured example
 
