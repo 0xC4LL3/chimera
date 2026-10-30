@@ -10,7 +10,7 @@ import time
 import traceback
 import unreal
 
-PROJECT = Path(__file__).resolve().parents[1]
+PROJECT = Path(__file__).absolute().parents[1]
 handle = None
 
 

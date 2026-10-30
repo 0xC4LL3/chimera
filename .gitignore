@@ -8,3 +8,4 @@ runs/
 third_party/
 app/.venv/
 app/data/
+examples/chimera-rear.fbm/

@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import unreal
 
-PROJECT = Path(__file__).resolve().parents[1]
+PROJECT = Path(__file__).absolute().parents[1]
 REPO = PROJECT.parents[1]
 ASSETS = "/Game/Chimera/Hero"
 STAGE = "/Game/Chimera/Stage"
@@ -63,6 +63,9 @@ def camera(name, location, target, primary=False):
 
 
 def import_hero(source, animation_hint):
+    # This folder contains only this script's generated FBX import.
+    if unreal.EditorAssetLibrary.does_directory_exist(ASSETS):
+        unreal.EditorAssetLibrary.delete_directory(ASSETS)
     options = unreal.FbxImportUI()
     options.set_editor_properties(dict(import_mesh=True, import_as_skeletal=True, import_animations=True,
                                       import_materials=True, import_textures=True, create_physics_asset=False,
@@ -92,6 +95,7 @@ def import_hero(source, animation_hint):
     choices = sorted((a for a in animations if animation_hint.lower() in a.get_name().lower()), key=lambda a: a.get_name())
     if len(choices) != 1:
         raise RuntimeError(f"Set animation_hint to select one imported animation. Candidates: {[a.get_name() for a in animations]}")
+    unreal.EditorAssetLibrary.save_directory(ASSETS, only_if_is_dirty=False, recursive=True)
     return mesh, choices[0], animations
 
 
@@ -144,19 +148,20 @@ def build():
     pp.set_editor_property("unbound", True)
     settings = pp.get_editor_property("settings")
     for name, value in dict(auto_exposure_method=unreal.AutoExposureMethod.AEM_MANUAL,
-                            auto_exposure_apply_physical_camera_exposure=False, auto_exposure_bias=0,
+                            auto_exposure_apply_physical_camera_exposure=False, auto_exposure_bias=-4,
                             bloom_intensity=.12, vignette_intensity=.18, motion_blur_amount=0).items():
         settings.set_editor_property("override_" + name, True)
         settings.set_editor_property(name, value)
     pp.set_editor_property("settings", settings)
-    views = [camera("Camera / hero", (720, -820, 360), target, primary=True),
+    observer = actors.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(0, -2500, 100))
+    observer.set_actor_label("Observer start")
+    views = [camera("Camera / hero", (720, 820, 360), target, primary=True),
              camera("Camera / side", (0, -1100, 300), target),
              camera("Camera / front", (1100, 0, 300), target)]
     actors.set_selected_level_actors([])
     levels.pilot_level_actor(views[0])
     levels.set_exact_camera_view(True)
     levels.editor_set_game_view(True)
-    levels.editor_set_viewport_realtime(True)
     levels.save_current_level()
 
     state = {"source_fbx": str(source), "source_label": config["source_label"], "mesh": mesh.get_path_name(),

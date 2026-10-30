@@ -23,6 +23,29 @@
     "max_turn_deg": 5.9,
     "motion": 0.425
   },
-  "review": "Selected after source-video and four-angle exported-animation review. Unreal verification follows separately.",
-  "credit": "Hero supplied by the project owner and generated with Tripo. See CREDITS.md."
+  "review": "Selected after review of the generated video and exported animation from four angles. Native Unreal playback also passed.",
+  "credit": "Hero supplied by the project owner and generated with Tripo. See CREDITS.md.",
+  "unreal_verification": {
+    "engine_version": "5.8.3",
+    "source_fbx": "chimera-rear.fbx",
+    "clip": "lion_rises_onto_inplace",
+    "imported_bones": 36,
+    "additional_fbx_root": "ChimeraRig",
+    "native_play_rate": 1.0,
+    "duration_seconds": 4.0,
+    "camera_views": [
+      "hero",
+      "side",
+      "front"
+    ],
+    "review": "Textures, full-body framing, held rear contact and recovery were inspected. Encoded camera videos were checked for actual changing poses.",
+    "camera_capture": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 24,
+      "frames_per_view": 97,
+      "method": "Imported Unreal animation sampled with explicit skeletal pose evaluation"
+    },
+    "reproduction_guide": "../unreal/ChimeraDemo/README.md"
+  }
 }

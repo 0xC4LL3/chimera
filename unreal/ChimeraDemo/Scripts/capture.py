@@ -11,7 +11,7 @@ import time
 import traceback
 import unreal
 
-PROJECT = Path(__file__).resolve().parents[1]
+PROJECT = Path(__file__).absolute().parents[1]
 handle = None
 write_status = None
 
@@ -48,8 +48,10 @@ def start(component, animation, shots=("hero", "side", "front"), fps=24, width=1
     component.set_animation(animation)
     component.stop()
     component.set_update_animation_in_editor(True)
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    unreal.SystemLibrary.execute_console_command(world, "r.HighResScreenshotDelay 16")
+    unreal.SystemLibrary.execute_console_command(world, "r.Shadow.Virtual.SMRT.RayCountLocal 16")
     levels.editor_set_game_view(True)
-    levels.editor_set_viewport_realtime(True)
 
     def status(value):
         (out / "status.json").write_text(json.dumps({"status": value, "shot": state["shot"],
@@ -70,6 +72,8 @@ def start(component, animation, shots=("hero", "side", "front"), fps=24, width=1
                 if state["shot"] == len(shots):
                     status("complete")
                     component.set_position(0, False)
+                    component.override_animation_data(animation, True, True, 0, 1)
+                    component.stop()
                     levels.pilot_level_actor(cameras[shots[0]])
                     stop(False)
                     return
@@ -78,7 +82,11 @@ def start(component, animation, shots=("hero", "side", "front"), fps=24, width=1
                 if state["frame"] == 0:
                     levels.pilot_level_actor(cameras[name])
                     levels.set_exact_camera_view(True)
+                # OverrideAnimationData evaluates the pose and refreshes bone transforms.
+                # SetPosition alone can leave a paused editor component on a stale pose.
                 component.set_position(min(state["frame"] / fps, duration), False)
+                component.override_animation_data(animation, False, False,
+                                                   min(state["frame"] / fps, duration), 1)
                 levels.editor_invalidate_viewports()
                 state["ready"] = time.monotonic() + (1.5 if state["frame"] == 0 else .2)
                 state["phase"] = "capture"

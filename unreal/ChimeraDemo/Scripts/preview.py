@@ -7,7 +7,7 @@ import traceback
 from pathlib import Path
 import unreal
 
-PROJECT = Path(__file__).resolve().parents[1]
+PROJECT = Path(__file__).absolute().parents[1]
 sys.path.insert(0, str(PROJECT / "Scripts"))
 SAVED = PROJECT / "Saved"
 handle = None
@@ -32,6 +32,7 @@ def pause():
 def seek(seconds):
     pause()
     component.set_position(seconds, False)
+    component.override_animation_data(animations[clip_index], False, False, seconds, 1)
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).editor_invalidate_viewports()
 
 
@@ -98,7 +99,7 @@ def start():
         if 0x78 in fresh: view(view_index + 1)
 
     handle = unreal.register_slate_post_tick_callback(tick)
-    unreal.EditorPythonScriptingLibrary.set_keep_python_script_alive(True)
+    unreal.EditorPythonScripting.set_keep_python_script_alive(True)
     unreal.log("Chimera preview: F6 replay, F7 pause, F8 reset, F9 camera.")
 
 

@@ -3,5 +3,6 @@ Content/
 DerivedDataCache/
 Intermediate/
 Saved/
+Config/DefaultInput.ini
 *.sln
 .vs/
