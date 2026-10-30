@@ -2,11 +2,11 @@
 
 This UE 5.8 project imports the actual FBX exported by Chimera as a skeletal mesh and animation assets. A small editor script builds a studio stage with three cameras. The level also saves native single-animation playback for Play In Editor.
 
-**Status:** source prepared. Import, material appearance, lighting and animation playback still need a live Unreal run. The configured FBX is the inherited rear take used to prepare the stage.
+**Status:** the selected FBX is the visually approved rear captured on the corrected hero. Import, material appearance, lighting and animation playback still need a live Unreal run.
 
 ## Build the scene
 
-1. Wait for the shared GPU slot described in [RESOURCE_COORDINATION.md](../../RESOURCE_COORDINATION.md).
+1. Close other GPU workloads. On the shared development machine, follow [RESOURCE_COORDINATION.md](../../RESOURCE_COORDINATION.md).
 2. Edit `Config/demo.json`. Set `source_fbx` to the chosen export, relative to the Chimera repository. `animation_hint` must select exactly one imported animation by name. The initial value selects the in-place clip.
 3. Run `launch.ps1 -Build` from Windows PowerShell. The project may be on a WSL UNC path. The script uses the installed UE 5.8 by default; pass `-Engine` for a different installation path.
 
