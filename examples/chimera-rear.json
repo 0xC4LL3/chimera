@@ -1,0 +1,28 @@
+{
+  "input": "app/samples/chimera.glb",
+  "input_bones": 35,
+  "input_animation_clips": 0,
+  "prompt": "The lion rises onto its hind legs, raises both front paws and roars while the snake tail lifts and sways. It then returns to all four paws.",
+  "rewritten_prompt": "The creature rises up onto its hind legs, lifting both front paws off the ground. It opens its mouth wide to roar while the snake tail rises higher and sways side to side. The creature then lowers its front paws back down to the ground, returning to its original four-legged stance. Side view, static locked camera, plain studio background, 3D render.",
+  "reference_video": "chimera-reference.mp4",
+  "video_seed": 20299258220696,
+  "workflow": "workflows/generate_api.json",
+  "grounded": true,
+  "split_screen": false,
+  "loop_cleanup": true,
+  "exported_clips": [
+    "lion_rises_onto",
+    "lion_rises_onto_inplace"
+  ],
+  "duration_seconds": 4.0,
+  "capture_check": {
+    "ok": true,
+    "mean_overlap": 0.865,
+    "min_overlap": 0.807,
+    "worst_frame": 42,
+    "max_turn_deg": 5.9,
+    "motion": 0.425
+  },
+  "review": "Selected after source-video and four-angle exported-animation review. Unreal verification follows separately.",
+  "credit": "Hero supplied by the project owner and generated with Tripo. See CREDITS.md."
+}

@@ -6,6 +6,14 @@ Chimera turns a 3D model and a text prompt into an editable skeletal animation. 
 
 The input can be a new character with no animation clips. Models without a skeleton can be rigged with SkinTokens. The web app uses the Comfy SDK with a local ComfyUI backend. All inference in the shipped workflows uses open-weight models.
 
+## Try the captured example
+
+The [chimera input](app/samples/chimera.glb) has a custom 35-bone rig and no animation clips. The example turns a rear-and-roar prompt into a four-second skeletal animation.
+
+Download the [animated GLB](examples/chimera-rear.glb), [FBX](examples/chimera-rear.fbx) or [BVH](examples/chimera-rear.bvh). GLB and FBX include root-motion and in-place clips. BVH contains the root-motion clip. These files can be inspected without downloading inference models.
+
+The [generated reference video](examples/chimera-reference.mp4) and [capture record](examples/chimera-rear.json) preserve the prompt, video seed and geometric check. The chosen result was also reviewed from four angles. [CREDITS.md](CREDITS.md) covers its source asset.
+
 ## Run locally
 
 Follow [SETUP.md](SETUP.md) and [MODELS.md](MODELS.md), then run:
