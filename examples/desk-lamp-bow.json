@@ -1,0 +1,28 @@
+{
+  "input": "examples/desk-lamp-input.glb",
+  "input_bones": 4,
+  "input_animation_clips": 0,
+  "prompt": "The desk lamp makes one small bow, bending its arms so its shade dips toward its base. The base stays fixed. It then straightens back to its starting pose.",
+  "rewritten_prompt": "The desk lamp bends its lower arm downward at the base joint, causing the upper arm and shade to dip toward the base. The shade tilts forward and down as the lamp completes one small bow. The lamp then straightens its arms back up, returning the shade to its original position above the base. The base remains fixed in place throughout the motion. Side view, static locked camera, plain studio background, 3D render.",
+  "reference_video": "desk-lamp-reference.mp4",
+  "video_seed": 154577252748489,
+  "workflow": "workflows/generate_api.json",
+  "grounded": true,
+  "split_screen": false,
+  "loop_cleanup": true,
+  "exported_clips": [
+    "desk_lamp_makes",
+    "desk_lamp_makes_inplace"
+  ],
+  "duration_seconds": 4.0,
+  "capture_check": {
+    "ok": true,
+    "mean_overlap": 0.915,
+    "min_overlap": 0.87,
+    "worst_frame": 23,
+    "max_turn_deg": 1.8,
+    "motion": 0.554
+  },
+  "review": "Actual exported animation reviewed from four angles. Stable base, connected hinges and rigid parts through the bow and recovery.",
+  "credit": "Original procedural desk lamp created for Chimera."
+}

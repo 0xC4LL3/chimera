@@ -14,6 +14,8 @@ Download the [animated GLB](examples/chimera-rear.glb), [FBX](examples/chimera-r
 
 The [generated reference video](examples/chimera-reference.mp4) and [capture record](examples/chimera-rear.json) preserve the prompt, video seed and geometric check. The chosen result was also reviewed from four angles. [CREDITS.md](CREDITS.md) covers its source asset.
 
+An original four-bone desk lamp demonstrates mechanical articulation. Try its [input model](examples/desk-lamp-input.glb), [captured bow as GLB](examples/desk-lamp-bow.glb) or [FBX](examples/desk-lamp-bow.fbx). The [reference video](examples/desk-lamp-reference.mp4) and [capture record](examples/desk-lamp-bow.json) show the same pipeline applied to rigid parts.
+
 ## Run locally
 
 Follow [SETUP.md](SETUP.md) and [MODELS.md](MODELS.md), then run:
